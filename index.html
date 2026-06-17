@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js" crossorigin></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js" crossorigin></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <style>
   :root { --pink:#FF007F; --cyan:#00E5FF; }
@@ -117,6 +118,17 @@
   </script>
   <script type="text/babel" data-presets="react">
     const { useState, useEffect, useRef, useLayoutEffect } = React;
+
+    /* --------------------------- Supabase --------------------------- */
+    const SUPABASE_URL = "https://nmkonmvcqcejhrqjmcqv.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ta29ubXZjcWNlamhycWptY3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MjU3MDAsImV4cCI6MjA5NzMwMTcwMH0.tJ1gBIR9xI3Yu5PnY-8EYuHGl4vtIUiGRshq54GY6iY";
+    const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+    // Guest likes live in the browser until the user signs up, then they merge into the account.
+    const GUEST_LIKES_KEY = "yab_guest_likes";
+    function readGuestLikes() { try { var r = localStorage.getItem(GUEST_LIKES_KEY); return r ? JSON.parse(r) : []; } catch (e) { return []; } }
+    function writeGuestLikes(ids) { try { localStorage.setItem(GUEST_LIKES_KEY, JSON.stringify(ids)); } catch (e) {} }
+    function idToProfile(id) { return PROFILES.find(function (p) { return p.id === id; }); }
 
     /* ----------------------------- Data ----------------------------- */
     const PROFILES = [
@@ -699,13 +711,8 @@
       );
     }
 
-    function Conversation({ profile, onBack }) {
-      const storeKey = "yab_chat_" + profile.id;
-      const loadMsgs = () => {
-        try { var raw = localStorage.getItem(storeKey); if (raw) return JSON.parse(raw); } catch (e) {}
-        return profile.sends ? [{ from: "them", text: profile.preview }] : [];
-      };
-      const [msgs, setMsgs] = useState(loadMsgs);
+    function Conversation({ profile, onBack, user, requireAuth }) {
+      const [msgs, setMsgs] = useState(() => profile.sends ? [{ from: "them", text: profile.preview }] : []);
       const [text, setText] = useState("");
       const [typing, setTyping] = useState(false);
       const scroller = useRef(null);
@@ -713,14 +720,29 @@
       const [menuOpen, setMenuOpen] = useState(false);
       const [cameraOpen, setCameraOpen] = useState(false);
 
-      // Persist this girl's conversation (text only — blob photos can't survive a reload).
+      // Load this user's saved conversation with this girl from the database.
       useEffect(() => {
-        try { localStorage.setItem(storeKey, JSON.stringify(msgs.filter((m) => !m.media))); } catch (e) {}
-      }, [msgs]);
+        let cancelled = false;
+        if (user && sb) {
+          sb.from("messages").select("sender,content").eq("profile_id", profile.id).order("created_at", { ascending: true }).then(function (res) {
+            if (cancelled) return;
+            const rows = res.data || [];
+            if (rows.length) setMsgs(rows.map(function (r) { return { from: r.sender, text: r.content }; }));
+          });
+        }
+        return function () { cancelled = true; };
+      }, [user, profile.id]);
+
       useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, typing]);
 
-      // Fallback lines, used only if the AI backend isn't reachable (e.g. opened without deploying).
+      // Fallback lines, used only if the AI backend isn't reachable.
       const REPLIES = ["Haha I like the way you think 😄", "Tell me more about you", "You're cute, you know that?", "What are you up to later?", "I'm into music and late-night drives. You?", "Good answer 😉"];
+
+      const saveMsg = (sender, content) => {
+        if (user && sb && content) {
+          sb.from("messages").insert([{ user_id: user.id, profile_id: profile.id, sender: sender, content: content }]).then(function () {});
+        }
+      };
 
       const toHistory = (list) => list
         .map((m) => ({ role: m.from === "me" ? "user" : "assistant", content: m.media ? "(sent a photo)" : (m.text || "") }))
@@ -739,11 +761,14 @@
             setTyping(false);
             const replyText = d && d.reply ? d.reply : REPLIES[afterList.length % REPLIES.length];
             setMsgs((prev) => [...prev, { from: "them", text: replyText }]);
+            saveMsg("them", replyText);
           })
           .catch(() => {
             setTimeout(() => {
               setTyping(false);
-              setMsgs((prev) => [...prev, { from: "them", text: REPLIES[prev.length % REPLIES.length] }]);
+              const fb = REPLIES[afterList.length % REPLIES.length];
+              setMsgs((prev) => [...prev, { from: "them", text: fb }]);
+              saveMsg("them", fb);
             }, 700);
           });
       };
@@ -751,20 +776,23 @@
       const send = () => {
         const t = text.trim();
         if (!t) return;
+        if (!user) { requireAuth(); return; }
         setText("");
         const next = [...msgs, { from: "me", text: t }];
         setMsgs(next);
+        saveMsg("me", t);
         aiReply(next);
       };
       const sendMedia = (file) => {
         if (!file) return;
+        if (!user) { requireAuth(); return; }
         const type = (file.type || "").startsWith("video") ? "video" : "image";
         const next = [...msgs, { from: "me", media: { type, url: URL.createObjectURL(file) } }];
         setMsgs(next);
         aiReply(next);
       };
       const onFile = (e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; setMenuOpen(false); sendMedia(f); };
-      const pick = (kind) => { setMenuOpen(false); if (kind === "camera") setCameraOpen(true); else if (galleryRef.current) galleryRef.current.click(); };
+      const pick = (kind) => { setMenuOpen(false); if (!user) { requireAuth(); return; } if (kind === "camera") setCameraOpen(true); else if (galleryRef.current) galleryRef.current.click(); };
 
       return (
         <div className="flex h-full flex-col">
@@ -826,9 +854,9 @@
       );
     }
 
-    function ChatsScreen({ matches, goHome, openId, onOpen, onBack }) {
+    function ChatsScreen({ matches, goHome, openId, onOpen, onBack, user, requireAuth }) {
       const open = matches.find((m) => m.id === openId);
-      if (open) return <Conversation profile={open} onBack={onBack} />;
+      if (open) return <Conversation profile={open} onBack={onBack} user={user} requireAuth={requireAuth} />;
       if (!matches.length) {
         return <EmptyTab icon={<ChatsIcon />} title="No chats yet" text="Like someone and they'll match with you instantly. Then say hi." action="Find matches" onAction={goHome} />;
       }
@@ -1146,7 +1174,7 @@
     }
 
     /* -------------------------- Profile -------------------------- */
-    function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView }) {
+    function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView, user, onLogin, onLogout }) {
       if (view === "edit") return <ProfileEdit me={me} onSave={setMe} onBack={() => setView(null)} />;
       if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} />;
       if (view === "notifications") return <NotificationsScreen notifs={notifs} setNotifs={setNotifs} onBack={() => setView(null)} />;
@@ -1172,6 +1200,26 @@
             <p className="text-sm text-white/50">{me.city} · Free plan</p>
           </div>
 
+          {user ? (
+            <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/20 text-[#FF007F]"><ProfileIcon /></div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs text-white/45">Signed in as</div>
+                <div className="truncate text-[14px] text-white/85">{user.email}</div>
+              </div>
+              <span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />
+            </div>
+          ) : (
+            <button onClick={onLogin} className="mt-5 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
+              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/25 text-[#FF007F]"><ProfileIcon /></div>
+              <div className="flex-1">
+                <div className="font-display text-[15px] font-bold">Sign up or log in</div>
+                <div className="text-xs text-white/55">Save your likes and chats across devices</div>
+              </div>
+              <span className="text-white/40"><ChevronIcon /></span>
+            </button>
+          )}
+
           <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
             <div className="font-display text-lg font-bold">Your AI Babe <span className="text-[#FF007F]">Gold</span></div>
             <p className="mt-1 text-sm text-white/65">Unlimited likes, see who liked you, and rewind your last swipe.</p>
@@ -1188,7 +1236,9 @@
             ))}
           </div>
 
-          <button className="mt-5 w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button>
+          {user
+            ? <button onClick={onLogout} className="mt-5 w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button>
+            : <button onClick={onLogin} className="mt-5 w-full rounded-2xl border border-[#FF007F]/40 py-3 text-sm font-semibold text-[#FF007F] hover:bg-[#FF007F]/10">Sign up / Log in</button>}
           <p className="mt-4 text-center text-xs text-white/25">Your AI Babe · v1.0</p>
         </div>
       );
@@ -1223,6 +1273,66 @@
     }
 
     /* ----------------------------- App ----------------------------- */
+    function AuthModal({ onClose }) {
+      const [mode, setMode] = useState("signup");
+      const [email, setEmail] = useState("");
+      const [password, setPassword] = useState("");
+      const [busy, setBusy] = useState(false);
+      const [err, setErr] = useState("");
+
+      const submit = async () => {
+        setErr("");
+        if (!email.trim() || password.length < 6) { setErr("Enter a valid email and a password of at least 6 characters."); return; }
+        if (!sb) { setErr("Sign in isn't available right now. Please try again later."); return; }
+        setBusy(true);
+        try {
+          const res = mode === "signup"
+            ? await sb.auth.signUp({ email: email.trim(), password: password })
+            : await sb.auth.signInWithPassword({ email: email.trim(), password: password });
+          if (res.error) { setErr(res.error.message); setBusy(false); return; }
+          onClose();
+        } catch (e) {
+          setErr(String((e && e.message) || e)); setBusy(false);
+        }
+      };
+
+      return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-5">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+          <div className="anim-up relative z-10 w-full max-w-[380px] rounded-3xl bg-zinc-900 p-6" style={{ boxShadow: "0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,0,127,.25)" }}>
+            <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-white/40 hover:text-white">
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+            <div className="mb-2 flex items-center gap-2"><PulseLogo /><span className="font-display text-base font-bold tracking-wider">Your AI Babe</span></div>
+            <h2 className="font-display text-2xl font-bold">{mode === "signup" ? "Create your account" : "Welcome back"}</h2>
+            <p className="mt-1 mb-5 text-sm text-white/55">{mode === "signup" ? "Sign up to start chatting with your matches." : "Log in to continue your conversations."}</p>
+
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"
+              className="mb-3 w-full rounded-xl bg-white/[0.06] px-4 py-3 text-[15px] text-white outline-none focus:ring-2 focus:ring-[#FF007F]/50" />
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">Password</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+              className="mb-2 w-full rounded-xl bg-white/[0.06] px-4 py-3 text-[15px] text-white outline-none focus:ring-2 focus:ring-[#FF007F]/50" />
+
+            {err ? <p className="mb-1 mt-1 text-sm text-red-400">{err}</p> : null}
+
+            <button onClick={submit} disabled={busy}
+              className="mt-3 w-full rounded-xl bg-gradient-to-r from-[#FF007F] to-[#FF4D9E] py-3 font-display text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(255,0,127,.4)] transition active:scale-[0.98] disabled:opacity-60">
+              {busy ? "Please wait…" : (mode === "signup" ? "Sign up" : "Log in")}
+            </button>
+
+            <div className="mt-4 text-center text-sm text-white/55">
+              {mode === "signup" ? "Already have an account? " : "New here? "}
+              <button onClick={() => { setErr(""); setMode(mode === "signup" ? "login" : "signup"); }} className="font-semibold text-[#FF007F]">
+                {mode === "signup" ? "Log in" : "Sign up"}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [tab, setTab] = useState("home");
       const [liked, setLiked] = useState([]);
@@ -1234,16 +1344,62 @@
       const [settings, setSettings] = useState({ showMe: "Women", distance: 25, ageRange: [22, 35], global: false, showDistance: true, showAge: true, incognito: false });
       const [notifs, setNotifs] = useState({ push: true, matches: true, messages: true, likes: true, superLikes: false, promos: false, email: false });
       const [profileView, setProfileView] = useState(null);
+      const [session, setSession] = useState(null);
+      const [authOpen, setAuthOpen] = useState(false);
+      const user = session ? session.user : null;
+
+      // Watch auth state.
+      useEffect(() => {
+        if (!sb) return;
+        sb.auth.getSession().then(function (res) { setSession(res.data.session); });
+        const sub = sb.auth.onAuthStateChange(function (_e, s) { setSession(s); });
+        return function () { if (sub && sub.data && sub.data.subscription) sub.data.subscription.unsubscribe(); };
+      }, []);
+
+      // Load likes from the right place; on login, merge guest likes into the account first.
+      useEffect(() => {
+        let cancelled = false;
+        async function load() {
+          if (user && sb) {
+            const guest = readGuestLikes();
+            if (guest.length) {
+              await sb.from("likes").upsert(guest.map(function (id) { return { user_id: user.id, profile_id: id }; }), { onConflict: "user_id,profile_id", ignoreDuplicates: true });
+              writeGuestLikes([]);
+            }
+            const res = await sb.from("likes").select("profile_id");
+            if (cancelled) return;
+            setLiked((res.data || []).map(function (r) { return idToProfile(r.profile_id); }).filter(Boolean));
+          } else {
+            if (cancelled) return;
+            setLiked(readGuestLikes().map(idToProfile).filter(Boolean));
+          }
+        }
+        load();
+        return function () { cancelled = true; };
+      }, [user]);
+
       const goTab = (t) => { setProfileView(null); setChatOpenId(null); setTab(t); };
+      const requireAuth = () => setAuthOpen(true);
 
       const addLike = (profile) => {
         setLiked((prev) => prev.some((p) => p.id === profile.id) ? prev : [...prev, profile]);
         setMatchProfile(profile);
+        if (user && sb) {
+          sb.from("likes").upsert([{ user_id: user.id, profile_id: profile.id }], { onConflict: "user_id,profile_id", ignoreDuplicates: true }).then(function () {});
+        } else {
+          const ids = readGuestLikes();
+          if (ids.indexOf(profile.id) === -1) { ids.push(profile.id); writeGuestLikes(ids); }
+        }
       };
       const undoLike = (id) => {
         setLiked((prev) => prev.filter((p) => p.id !== id));
         setMatchProfile((m) => (m && m.id === id ? null : m));
         setChatOpenId((c) => (c === id ? null : c));
+        if (user && sb) {
+          sb.from("likes").delete().eq("profile_id", id).then(function () {});
+        } else {
+          writeGuestLikes(readGuestLikes().filter(function (x) { return x !== id; }));
+        }
       };
 
       const matches = liked.map((p) => {
@@ -1253,6 +1409,7 @@
 
       const goToChat = (id) => { setMatchProfile(null); setDetailProfile(null); setTab("chats"); setChatOpenId(id); };
       const likeFromDetail = (p) => { setDetailProfile(null); addLike(p); };
+      const logout = () => { if (sb) sb.auth.signOut(); setTab("home"); setProfileView(null); setChatOpenId(null); };
       const chatting = tab === "chats" && chatOpenId != null && matches.some((m) => m.id === chatOpenId);
       const profileSubOpen = tab === "profile" && profileView != null;
       const hideChrome = chatting || profileSubOpen;
@@ -1273,8 +1430,8 @@
             </div>
             {tab === "explore" && <ExploreScreen onOpen={setDetailProfile} />}
             {tab === "likes" && <LikesScreen liked={liked} goHome={() => setTab("home")} onOpen={setDetailProfile} />}
-            {tab === "chats" && <ChatsScreen matches={matches} goHome={() => setTab("home")} openId={chatOpenId} onOpen={setChatOpenId} onBack={() => setChatOpenId(null)} />}
-            {tab === "profile" && <ProfileScreen me={me} setMe={setMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} />}
+            {tab === "chats" && <ChatsScreen matches={matches} goHome={() => setTab("home")} openId={chatOpenId} onOpen={setChatOpenId} onBack={() => setChatOpenId(null)} user={user} requireAuth={requireAuth} />}
+            {tab === "profile" && <ProfileScreen me={me} setMe={setMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} />}
           </div>
 
           {!hideChrome && <TabBar tab={tab} setTab={goTab} likeCount={liked.length} />}
@@ -1288,6 +1445,8 @@
           {matchProfile && (
             <MatchOverlay profile={matchProfile} onMessage={() => goToChat(matchProfile.id)} onKeepSwiping={() => setMatchProfile(null)} />
           )}
+
+          {authOpen && <AuthModal onClose={() => setAuthOpen(false)} />}
         </div>
       );
     }
