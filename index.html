@@ -248,9 +248,21 @@
         if (!v || !src) return;
         v.muted = true;
         const tryPlay = () => { const p = v.play(); if (p && p.catch) p.catch(() => {}); };
+        // Mobile browsers can drop the decoded video when the app is backgrounded,
+        // leaving a frozen poster. Reload and resume when we return to the foreground.
+        const reload = () => { try { v.load(); } catch (e) {} v.addEventListener("canplay", tryPlay, { once: true }); tryPlay(); };
         tryPlay();
         v.addEventListener("canplay", tryPlay, { once: true });
-        return () => v.removeEventListener("canplay", tryPlay);
+        const onVis = () => { if (document.visibilityState === "visible") reload(); };
+        document.addEventListener("visibilitychange", onVis);
+        window.addEventListener("pageshow", reload);
+        window.addEventListener("focus", tryPlay);
+        return () => {
+          v.removeEventListener("canplay", tryPlay);
+          document.removeEventListener("visibilitychange", onVis);
+          window.removeEventListener("pageshow", reload);
+          window.removeEventListener("focus", tryPlay);
+        };
       }, [src]);
       return (
         <video ref={vref} src={src} poster={poster} autoPlay loop muted playsInline preload="auto"
