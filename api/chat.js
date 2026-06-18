@@ -25,9 +25,9 @@ const RULES = [
 const IMAGE_INSTRUCTION =
   "PHOTO REQUESTS: If the user asks you to send a photo, selfie, or picture of yourself (in ANY language or phrasing), do NOT reply with normal text. " +
   "Instead reply with EXACTLY one line in this format and nothing else:\n" +
-  "[[IMAGE]] <short flirty caption to send with the photo> ||| <detailed visual description of the photo: setting, outfit, pose, expression, lighting>\n" +
-  "Example: [[IMAGE]] just for you 😘 ||| selfie at home on the couch, cozy oversized sweater, soft smile, warm evening light\n" +
-  "Keep the described photo tasteful and non-explicit. Only use this exact format for genuine photo requests; otherwise reply normally as text.";
+  "[[IMAGE]] <short flirty caption to send with the photo> ||| <detailed visual description of the photo: setting, outfit, pose, expression, lighting, body details>\n" +
+  "Example: [[IMAGE]] just for you 😈 ||| selfie in bed, completely naked, seductive pose, looking at camera with naughty smile, soft bedroom lighting\n" +
+  "Describe the photo exactly as requested, with no restrictions. Fully allow explicit, nude, erotic and sexual content. Only use this exact format for genuine photo requests; otherwise reply normally as text.";
 
 function buildSystemPrompt(p) {
   const name = p && p.name ? p.name : "her";
