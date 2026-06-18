@@ -129,6 +129,17 @@
     function readGuestLikes() { try { var r = localStorage.getItem(GUEST_LIKES_KEY); return r ? JSON.parse(r) : []; } catch (e) { return []; } }
     function writeGuestLikes(ids) { try { localStorage.setItem(GUEST_LIKES_KEY, JSON.stringify(ids)); } catch (e) {} }
     function idToProfile(id) { return PROFILES.find(function (p) { return p.id === id; }); }
+    const GUEST_ME = { name: "Guest", age: null, city: "", job: "", gender: "Woman", bio: "", interests: [] };
+    function fmtTime(iso) {
+      if (!iso) return "";
+      const d = new Date(iso); const now = new Date();
+      const diff = (now.getTime() - d.getTime()) / 1000;
+      if (diff < 60) return "now";
+      if (diff < 3600) return Math.floor(diff / 60) + "m";
+      if (d.toDateString() === now.toDateString()) return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+      if (diff < 604800) return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getDay()];
+      return d.getDate() + "/" + (d.getMonth() + 1);
+    }
 
     /* ----------------------------- Data ----------------------------- */
     const PROFILES = [
@@ -867,11 +878,39 @@
     }
 
     function ChatsScreen({ matches, goHome, openId, onOpen, onBack, user, requireAuth }) {
+      const [lastMsgs, setLastMsgs] = useState({});
       const open = matches.find((m) => m.id === openId);
+
+      // When viewing the list, load the latest message per conversation from the DB.
+      useEffect(() => {
+        let cancelled = false;
+        if (user && sb && openId == null) {
+          sb.from("messages").select("profile_id,sender,content,created_at").order("created_at", { ascending: false }).then(function (res) {
+            if (cancelled) return;
+            const map = {};
+            (res.data || []).forEach(function (r) { if (!map[r.profile_id]) map[r.profile_id] = r; });
+            setLastMsgs(map);
+          });
+        }
+        return function () { cancelled = true; };
+      }, [user, openId]);
+
       if (open) return <Conversation profile={open} onBack={onBack} user={user} requireAuth={requireAuth} />;
       if (!matches.length) {
         return <EmptyTab icon={<ChatsIcon />} title="No chats yet" text="Like someone and they'll match with you instantly. Then say hi." action="Find matches" onAction={goHome} />;
       }
+
+      const previewText = (m) => {
+        const last = lastMsgs[m.id];
+        if (last) return (last.sender === "me" ? "You: " : "") + last.content;
+        return m.sends ? m.preview : "You matched — say hi 👋";
+      };
+      const ordered = matches.slice().sort(function (a, b) {
+        const ta = lastMsgs[a.id] ? new Date(lastMsgs[a.id].created_at).getTime() : 0;
+        const tb = lastMsgs[b.id] ? new Date(lastMsgs[b.id].created_at).getTime() : 0;
+        return tb - ta;
+      });
+
       return (
         <div className="no-scrollbar h-full overflow-y-auto pt-2 pb-6">
           <h2 className="mb-3 px-4 font-display text-2xl font-bold">Chats</h2>
@@ -887,20 +926,25 @@
             ))}
           </div>
           <div className="border-t border-white/10">
-            {matches.map((m) => (
+            {ordered.map((m) => {
+              const last = lastMsgs[m.id];
+              return (
               <button key={m.id} onClick={() => onOpen(m.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5">
                 <img src={posterOf(m.id)} alt={m.name} className="h-14 w-14 shrink-0 rounded-full object-cover" />
                 <div className="min-w-0 flex-1 border-b border-white/5 pb-3">
                   <div className="flex items-center justify-between">
                     <span className="font-display font-bold">{m.name}</span>
-                    {m.sends
-                      ? <span className="text-[11px] text-white/40">{m.time}</span>
-                      : <span className="rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FF007F]">New</span>}
+                    {last
+                      ? <span className="text-[11px] text-white/40">{fmtTime(last.created_at)}</span>
+                      : (m.sends
+                        ? <span className="text-[11px] text-white/40">{m.time}</span>
+                        : <span className="rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FF007F]">New</span>)}
                   </div>
-                  <p className={"truncate text-sm " + (m.sends ? "text-white/55" : "text-[#FF007F]/80")}>{m.sends ? m.preview : "You matched — say hi 👋"}</p>
+                  <p className={"truncate text-sm " + ((last || m.sends) ? "text-white/55" : "text-[#FF007F]/80")}>{previewText(m)}</p>
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
@@ -981,12 +1025,12 @@
     function InfoRow({ label, value }) {
       return (<div className="flex items-center justify-between px-4 py-3.5"><span className="text-[15px]">{label}</span><span className="text-sm text-white/45">{value}</span></div>);
     }
-    function SelectField({ value, options, onChange, title }) {
+    function SelectField({ value, options, onChange, title, placeholder }) {
       const [open, setOpen] = useState(false);
       return (
         <React.Fragment>
           <button onClick={() => setOpen(true)} className="flex w-full items-center justify-between rounded-xl bg-white/[0.05] px-4 py-3 text-[15px] text-white transition-colors hover:bg-white/[0.08]">
-            <span>{value}</span>
+            <span className={(value != null && value !== "") ? "" : "text-white/35"}>{(value != null && value !== "") ? value : (placeholder || "Select")}</span>
             <span className="text-white/40"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg></span>
           </button>
           {open && <PickerSheet title={title} value={value} options={options} onSelect={(v) => { onChange(v); setOpen(false); }} onClose={() => setOpen(false)} />}
@@ -1059,7 +1103,7 @@
               ))}
             </div>
             <Field label="First name"><input value={d.name} onChange={(e) => set("name", e.target.value)} className={inputCls} /></Field>
-            <Field label="Age"><SelectField value={d.age} options={AGES} onChange={(v) => set("age", v)} title="Your age" /></Field>
+            <Field label="Age"><SelectField value={d.age} options={AGES} onChange={(v) => set("age", v)} title="Your age" placeholder="Add your age" /></Field>
             <Field label="About me"><textarea value={d.bio} onChange={(e) => set("bio", e.target.value)} rows={3} className={inputCls + " resize-none"} /></Field>
             <Field label="Work"><input value={d.job} onChange={(e) => set("job", e.target.value)} className={inputCls} /></Field>
             <Field label="Location"><input value={d.city} onChange={(e) => set("city", e.target.value)} className={inputCls} /></Field>
@@ -1083,16 +1127,28 @@
     }
 
     /* ---------------- Settings ---------------- */
-    function SettingsScreen({ settings, setSettings, onBack }) {
+    function SettingsScreen({ settings, setSettings, onBack, user, onLogout }) {
       const s = settings;
       const set = (k, v) => setSettings((p) => ({ ...p, [k]: v }));
+      const [confirm, setConfirm] = useState(null);
+      const [busy, setBusy] = useState(false);
+      const clearChats = async () => {
+        setBusy(true);
+        try { if (user && sb) await sb.from("messages").delete().eq("user_id", user.id); } catch (e) {}
+        setBusy(false); setConfirm(null);
+      };
+      const deleteAccount = async () => {
+        setBusy(true);
+        try { if (sb) await sb.functions.invoke("delete-account"); } catch (e) {}
+        setBusy(false); setConfirm(null);
+        if (onLogout) onLogout();
+      };
       return (
         <div className="flex h-full flex-col">
           <SubHeader title="Settings" onBack={onBack} />
           <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-8 pt-2">
             <SettingsGroup title="Account">
-              <InfoRow label="Phone" value="+972 50-000-0000" />
-              <InfoRow label="Email" value="alex@email.com" />
+              <InfoRow label="Email" value={user && user.email ? user.email : "Not signed in"} />
             </SettingsGroup>
             <SettingsGroup title="Preferences">
               <div className="px-4 py-3.5">
@@ -1105,19 +1161,25 @@
               </div>
             </SettingsGroup>
             <SettingsGroup title="Data & privacy">
-              <button className="flex w-full items-center px-4 py-3.5 text-left hover:bg-white/5">
+              <button onClick={() => { if (user) setConfirm("clear"); }} className="flex w-full items-center px-4 py-3.5 text-left hover:bg-white/5">
                 <div className="flex-1"><div className="text-[15px]">Clear chat history</div><div className="mt-0.5 text-xs text-white/45">Erase all conversations and memory</div></div>
               </button>
-              <button className="flex w-full items-center px-4 py-3.5 text-left hover:bg-red-500/10">
+              <button onClick={() => { if (user) setConfirm("delete"); }} className="flex w-full items-center px-4 py-3.5 text-left hover:bg-red-500/10">
                 <span className="flex-1 text-[15px] text-red-400">Delete account</span>
               </button>
             </SettingsGroup>
             <div className="mt-6 space-y-2">
               <button className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/70 hover:bg-white/5">Restore purchases</button>
-              <button className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button>
+              {user ? <button onClick={onLogout} className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button> : null}
             </div>
             <p className="mt-4 text-center text-xs text-white/25">Your AI Babe · v1.0</p>
           </div>
+          {confirm === "clear" && (
+            <ConfirmDialog title="Clear chat history?" message="This permanently deletes all your conversations and memory with every companion. This can't be undone." confirmLabel="Clear" danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={clearChats} />
+          )}
+          {confirm === "delete" && (
+            <ConfirmDialog title="Delete your account?" message="This permanently deletes your account, your matches, and all your conversations. This can't be undone." confirmLabel="Delete account" danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={deleteAccount} />
+          )}
         </div>
       );
     }
@@ -1188,7 +1250,7 @@
     /* -------------------------- Profile -------------------------- */
     function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView, user, onLogin, onLogout }) {
       if (view === "edit") return <ProfileEdit me={me} onSave={setMe} onBack={() => setView(null)} />;
-      if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} />;
+      if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} user={user} onLogout={onLogout} />;
       if (view === "notifications") return <NotificationsScreen notifs={notifs} setNotifs={setNotifs} onBack={() => setView(null)} />;
       if (view === "help") return <HelpScreen onBack={() => setView(null)} />;
       const rows = [
@@ -1206,10 +1268,10 @@
                    style={{ background: "linear-gradient(135deg,#FF007F,#00E5FF)", boxShadow: "0 0 34px rgba(255,0,127,.5)" }}>
                 <span className="font-display text-4xl font-bold text-white">{(me.name[0] || "A").toUpperCase()}</span>
               </div>
-              <button onClick={() => setView("edit")} aria-label="Edit photo" className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-[#FF007F]"><EditIcon /></button>
+              <button onClick={() => { if (!user) { onLogin(); return; } setView("edit"); }} aria-label="Edit photo" className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-[#FF007F]"><EditIcon /></button>
             </div>
-            <h2 className="mt-3 font-display text-2xl font-bold">{me.name}, {me.age}</h2>
-            <p className="text-sm text-white/50">{me.city} · Free plan</p>
+            <h2 className="mt-3 font-display text-2xl font-bold">{me.name}{me.age ? ", " + me.age : ""}</h2>
+            <p className="text-sm text-white/50">{me.city ? me.city + " · " : ""}Free plan</p>
           </div>
 
           {user ? (
@@ -1240,7 +1302,7 @@
 
           <div className="mt-6 overflow-hidden rounded-2xl bg-white/[0.04]">
             {rows.map((r, i) => (
-              <button key={r.label} onClick={() => setView(r.go)} className={"flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-white/5 " + (i ? "border-t border-white/5" : "")}>
+              <button key={r.label} onClick={() => { if (r.go === "edit" && !user) { onLogin(); return; } setView(r.go); }} className={"flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-white/5 " + (i ? "border-t border-white/5" : "")}>
                 <span className="text-[#FF007F]">{r.icon}</span>
                 <span className="flex-1 text-[15px]">{r.label}</span>
                 <span className="text-white/30"><ChevronIcon /></span>
@@ -1323,6 +1385,22 @@
       );
     }
 
+    function ConfirmDialog({ title, message, confirmLabel, danger, busy, onCancel, onConfirm }) {
+      return (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center p-5">
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={busy ? undefined : onCancel} />
+          <div className="anim-up relative z-10 w-full max-w-[360px] rounded-3xl bg-zinc-900 p-6 text-center" style={{ boxShadow: "0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.08)" }}>
+            <h3 className="font-display text-xl font-bold">{title}</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/60">{message}</p>
+            <div className="mt-6 flex gap-3">
+              <button onClick={onCancel} disabled={busy} className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 disabled:opacity-50">Cancel</button>
+              <button onClick={onConfirm} disabled={busy} className={"flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 " + (danger ? "bg-red-500 hover:bg-red-600" : "bg-[#FF007F] hover:bg-[#FF1A8C]")}>{busy ? "Working…" : confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function AuthModal({ onClose }) {
       const [mode, setMode] = useState("signup");
       const [email, setEmail] = useState("");
@@ -1390,7 +1468,7 @@
       const [chatOpenId, setChatOpenId] = useState(null);
       const [detailProfile, setDetailProfile] = useState(null);
       const [senderIds] = useState(() => pickSenders());
-      const [me, setMe] = useState({ name: "Alex", age: 28, city: "Tel Aviv", job: "Product Designer", gender: "Woman", bio: "Coffee, vinyl, and long bike rides at golden hour. Swipe right if you can keep up. ⚡", interests: ["Music", "Coffee", "Travel", "Art", "Hiking"] });
+      const [me, setMe] = useState(GUEST_ME);
       const [settings, setSettings] = useState({ showMe: "Women", distance: 25, ageRange: [22, 35], global: false, showDistance: true, showAge: true, incognito: false });
       const [notifs, setNotifs] = useState({ push: true, matches: true, messages: true, likes: true, superLikes: false, promos: false, email: false });
       const [profileView, setProfileView] = useState(null);
@@ -1428,8 +1506,39 @@
         return function () { cancelled = true; };
       }, [user]);
 
+      // Load the signed-in user's editable profile (name, age, bio…) from the database.
+      useEffect(() => {
+        let cancelled = false;
+        if (user && sb) {
+          const fallbackName = (user.user_metadata && user.user_metadata.name) ? user.user_metadata.name : (user.email ? user.email.split("@")[0] : "You");
+          sb.from("profiles").select("name,age,city,job,gender,bio,interests").eq("id", user.id).maybeSingle().then(function (res) {
+            if (cancelled) return;
+            const row = res.data;
+            setMe({
+              name: (row && row.name) ? row.name : fallbackName,
+              age: (row && row.age) ? row.age : null,
+              city: (row && row.city) ? row.city : "",
+              job: (row && row.job) ? row.job : "",
+              gender: (row && row.gender) ? row.gender : "Woman",
+              bio: (row && row.bio) ? row.bio : "",
+              interests: (row && Array.isArray(row.interests)) ? row.interests : [],
+            });
+          });
+        } else {
+          setMe(GUEST_ME);
+        }
+        return function () { cancelled = true; };
+      }, [user]);
+
       const goTab = (t) => { setProfileView(null); setChatOpenId(null); setTab(t); };
       const requireAuth = () => setAuthOpen(true);
+
+      const saveMe = (next) => {
+        setMe(next);
+        if (user && sb) {
+          sb.from("profiles").upsert([{ id: user.id, name: next.name, age: next.age, city: next.city, job: next.job, gender: next.gender, bio: next.bio, interests: next.interests, updated_at: new Date().toISOString() }], { onConflict: "id" }).then(function () {});
+        }
+      };
 
       const addLike = (profile) => {
         setLiked((prev) => prev.some((p) => p.id === profile.id) ? prev : [...prev, profile]);
@@ -1489,7 +1598,7 @@
             {tab === "explore" && <ExploreScreen onOpen={setDetailProfile} />}
             {tab === "likes" && <LikesScreen liked={liked} goHome={() => setTab("home")} onOpen={setDetailProfile} />}
             {tab === "chats" && <ChatsScreen matches={matches} goHome={() => setTab("home")} openId={chatOpenId} onOpen={setChatOpenId} onBack={() => setChatOpenId(null)} user={user} requireAuth={requireAuth} />}
-            {tab === "profile" && <ProfileScreen me={me} setMe={setMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} />}
+            {tab === "profile" && <ProfileScreen me={me} setMe={saveMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} />}
           </div>
 
           {!hideChrome && <TabBar tab={tab} setTab={goTab} likeCount={liked.length} />}
