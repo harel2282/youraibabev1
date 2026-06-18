@@ -742,6 +742,7 @@
       const galleryRef = useRef(null);
       const [menuOpen, setMenuOpen] = useState(false);
       const [cameraOpen, setCameraOpen] = useState(false);
+      const [lightbox, setLightbox] = useState(null);
 
       // Load this user's saved conversation with this girl from the database.
       useEffect(() => {
@@ -891,7 +892,7 @@
                     style={m.from === "me" ? { boxShadow: "0 0 0 2px rgba(255,0,127,.6), 0 0 16px rgba(255,0,127,.3)" } : { boxShadow: "0 0 0 1px rgba(255,255,255,.1)" }}>
                     {m.media.type === "video"
                       ? <video src={m.media.url} controls playsInline className="block max-h-64 w-44 bg-black object-cover" />
-                      : <img src={m.media.url} alt="" className="block max-h-72 w-48 object-cover" />}
+                      : <img src={m.media.url} alt="" onClick={() => setLightbox(m.media.url)} className="block max-h-72 w-48 cursor-pointer object-cover" />}
                   </div>
                 ) : (
                   <div className={"max-w-[75%] rounded-2xl px-4 py-2 text-[15px] " + (m.from === "me" ? "rounded-br-md bg-[#FF007F] text-white" : "rounded-bl-md bg-zinc-800 text-white/90")}
@@ -922,6 +923,12 @@
             <button onClick={send} aria-label="Send" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF007F] text-white" style={{ boxShadow: "0 0 18px rgba(255,0,127,.55)" }}><SendIcon /></button>
           </div>
           {cameraOpen && <CameraCapture onClose={() => setCameraOpen(false)} onCapture={(blob) => sendMedia(blob)} onGallery={() => { setCameraOpen(false); if (galleryRef.current) galleryRef.current.click(); }} />}
+          {lightbox && (
+            <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
+              <button onClick={() => setLightbox(null)} aria-label="Close" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20">×</button>
+              <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-full rounded-xl object-contain" />
+            </div>
+          )}
         </div>
       );
     }
@@ -951,7 +958,19 @@
 
       const previewText = (m) => {
         const last = lastMsgs[m.id];
-        if (last) return (last.sender === "me" ? "You: " : "") + last.content;
+        if (last) {
+          const isImg = typeof last.content === "string" && last.content.indexOf("[img]") === 0;
+          if (isImg) {
+            return (
+              <span className="inline-flex items-center gap-1 align-middle">
+                {last.sender === "me" ? <span>You:</span> : null}
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><circle cx="12" cy="12.5" r="3.2" /><path d="M8 6l1.4-2h5.2L20 6" /></svg>
+                <span>Photo</span>
+              </span>
+            );
+          }
+          return (last.sender === "me" ? "You: " : "") + last.content;
+        }
         return m.sends ? m.preview : "You matched — say hi 👋";
       };
       const ordered = matches.slice().sort(function (a, b) {
