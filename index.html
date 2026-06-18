@@ -750,7 +750,10 @@
           sb.from("messages").select("sender,content").eq("profile_id", profile.id).order("created_at", { ascending: true }).then(function (res) {
             if (cancelled) return;
             const rows = res.data || [];
-            if (rows.length) setMsgs(rows.map(function (r) { return { from: r.sender, text: r.content }; }));
+            if (rows.length) setMsgs(rows.map(function (r) {
+              if (typeof r.content === "string" && r.content.indexOf("[img]") === 0) return { from: r.sender, media: { type: "image", url: r.content.slice(5) } };
+              return { from: r.sender, text: r.content };
+            }));
           });
         }
         return function () { cancelled = true; };
@@ -782,6 +785,13 @@
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad status"))))
           .then((d) => {
             setTyping(false);
+            if (d && d.image) {
+              const cap = d.caption || "Here you go 😊";
+              setMsgs((prev) => [...prev, { from: "them", text: cap }]);
+              saveMsg("them", cap);
+              generatePhoto(d.scene || "");
+              return;
+            }
             const replyText = d && d.reply ? d.reply : REPLIES[afterList.length % REPLIES.length];
             setMsgs((prev) => [...prev, { from: "them", text: replyText }]);
             saveMsg("them", replyText);
@@ -794,6 +804,40 @@
               saveMsg("them", fb);
             }, 700);
           });
+      };
+
+      // ---- AI photo generation (Seedream via /api/image) ----
+      const replaceGenerating = (msg) => {
+        setMsgs((prev) => {
+          let idx = -1;
+          for (let k = prev.length - 1; k >= 0; k--) { if (prev[k].generating) { idx = k; break; } }
+          if (idx === -1) return [...prev, msg];
+          const copy = prev.slice(); copy[idx] = msg; return copy;
+        });
+      };
+      const failPhoto = () => { replaceGenerating({ from: "them", text: "Ugh, my camera's being weird right now 😅 ask me again in a sec?" }); };
+      const pollPhoto = (id, attempt) => {
+        if (attempt > 40) { failPhoto(); return; }
+        fetch("/api/image?id=" + encodeURIComponent(id))
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("poll failed"))))
+          .then((d) => {
+            if (d && d.status === "completed" && d.url) {
+              replaceGenerating({ from: "them", media: { type: "image", url: d.url } });
+              saveMsg("them", "[img]" + d.url);
+            } else if (d && d.status === "failed") {
+              failPhoto();
+            } else {
+              setTimeout(() => pollPhoto(id, attempt + 1), 3000);
+            }
+          })
+          .catch(() => failPhoto());
+      };
+      const generatePhoto = (scene) => {
+        setMsgs((prev) => [...prev, { from: "them", generating: true }]);
+        fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: profile.id, scene: scene }) })
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error("submit failed"))))
+          .then((d) => { if (!d || !d.requestId) throw new Error("no id"); pollPhoto(d.requestId, 0); })
+          .catch(() => failPhoto());
       };
 
       const send = () => {
@@ -837,12 +881,17 @@
             )}
             {msgs.map((m, i) => (
               <div key={i} className={"flex " + (m.from === "me" ? "justify-end" : "justify-start")}>
-                {m.media ? (
+                {m.generating ? (
+                  <div className="flex items-center gap-2.5 rounded-2xl rounded-bl-md bg-zinc-800 px-4 py-3 text-[15px] text-white/70" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,.1)" }}>
+                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-[#FF007F]" />
+                    <span>Sending a photo…</span>
+                  </div>
+                ) : m.media ? (
                   <div className={"overflow-hidden rounded-2xl " + (m.from === "me" ? "rounded-br-md" : "rounded-bl-md")}
                     style={m.from === "me" ? { boxShadow: "0 0 0 2px rgba(255,0,127,.6), 0 0 16px rgba(255,0,127,.3)" } : { boxShadow: "0 0 0 1px rgba(255,255,255,.1)" }}>
                     {m.media.type === "video"
                       ? <video src={m.media.url} controls playsInline className="block max-h-64 w-44 bg-black object-cover" />
-                      : <img src={m.media.url} alt="" className="block max-h-64 w-44 object-cover" />}
+                      : <img src={m.media.url} alt="" className="block max-h-72 w-48 object-cover" />}
                   </div>
                 ) : (
                   <div className={"max-w-[75%] rounded-2xl px-4 py-2 text-[15px] " + (m.from === "me" ? "rounded-br-md bg-[#FF007F] text-white" : "rounded-bl-md bg-zinc-800 text-white/90")}
