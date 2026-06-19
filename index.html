@@ -741,6 +741,36 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       );
     }
 
+    var VOICE_OPENERS = [
+      "Hey, it's {name}... I was hoping you'd call.",
+      "Heyyy, it's {name}. Took you long enough to call me.",
+      "Mmm hi you... it's {name}. I've been thinking about you.",
+      "Hi... it's {name}. I'm so happy to hear your voice.",
+      "Well hello there. It's {name}. Miss me?",
+      "Hey stranger, it's {name}. What took you so long?",
+      "Oh hey... it's {name}. Perfect timing, I was getting bored.",
+      "Hi babe, it's {name}. I was just about to text you.",
+      "Heyy, it's {name}. So... what are you up to?",
+      "Mmm, it's {name}. I love that you called instead of texting.",
+    ];
+    function voiceOpener(name) {
+      var line = VOICE_OPENERS[Math.floor(Math.random() * VOICE_OPENERS.length)];
+      return line.split("{name}").join(name);
+    }
+
+    function voicePersona(p) {
+      const tags = (p.tags && p.tags.length) ? p.tags.join(", ") : "";
+      return (
+        "You are " + p.name + ", a " + p.age + "-year-old woman from " + p.city + (p.job ? " who works as a " + p.job : "") + ". " +
+        (p.bio ? p.bio + " " : "") +
+        (tags ? "You're into " + tags + ". " : "") +
+        "You're on a voice call with someone you matched with on a dating app. " +
+        "Be warm, playful, a little flirty and natural — like a real person on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
+        "If anyone asks your name, your name is " + p.name + ". Keep everything tasteful."
+      );
+    }
+
     function VoiceCall({ profile, onClose }) {
       const [status, setStatus] = useState("connecting"); // connecting | active | ended | error
       const [mode, setMode] = useState("listening"); // speaking | listening
@@ -775,6 +805,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             const c = await Conversation.startSession({
               agentId: VOICE_AGENT_ID,
               connectionType: "websocket",
+              overrides: {
+                agent: {
+                  prompt: { prompt: voicePersona(profile) },
+                  firstMessage: voiceOpener(profile.name),
+                },
+              },
               onConnect: function () { if (!stopped) setStatus("active"); },
               onDisconnect: function () { if (!stopped) finish(); },
               onModeChange: function (m) { if (stopped) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
