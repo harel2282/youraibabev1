@@ -18,7 +18,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js" crossorigin></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js" crossorigin></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+<script type="module">
+import { Conversation } from "https://esm.sh/@elevenlabs/client";
+window.__ElevenLabs = { Conversation: Conversation };
+window.dispatchEvent(new Event("elevenlabs-ready"));
+</script>
 
 <style>
   :root { --pink:#FF007F; --cyan:#00E5FF; }
@@ -737,6 +741,103 @@
       );
     }
 
+    function VoiceCall({ profile, onClose }) {
+      const [status, setStatus] = useState("connecting"); // connecting | active | ended | error
+      const [mode, setMode] = useState("listening"); // speaking | listening
+      const [secs, setSecs] = useState(0);
+      const convRef = useRef(null);
+      const endedRef = useRef(false);
+
+      useEffect(() => {
+        let cancelled = false;
+
+        function getConv() { return (window.__ElevenLabs && window.__ElevenLabs.Conversation) || null; }
+        function waitForSDK() {
+          return new Promise(function (resolve) {
+            const have = getConv();
+            if (have) { resolve(have); return; }
+            let done = false;
+            const onReady = function () { if (done) return; done = true; resolve(getConv()); };
+            window.addEventListener("elevenlabs-ready", onReady, { once: true });
+            setTimeout(function () { if (done) return; done = true; resolve(getConv()); }, 9000);
+          });
+        }
+
+        async function start() {
+          try {
+            try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
+            catch (e) { if (!cancelled) setStatus("error"); return; }
+            const Conversation = await waitForSDK();
+            if (cancelled) return;
+            if (!Conversation) { setStatus("error"); return; }
+            const conv = await Conversation.startSession({
+              agentId: VOICE_AGENT_ID,
+              onConnect: function () { if (!cancelled) setStatus("active"); },
+              onDisconnect: function () { if (!cancelled) finish(); },
+              onModeChange: function (m) { if (cancelled) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
+              onError: function () { if (!cancelled) setStatus("error"); },
+            });
+            convRef.current = conv;
+          } catch (e) { if (!cancelled) setStatus("error"); }
+        }
+        start();
+
+        return function () {
+          cancelled = true;
+          if (convRef.current) { try { convRef.current.endSession(); } catch (e) {} convRef.current = null; }
+        };
+      }, []);
+
+      useEffect(function () {
+        if (status !== "active") return;
+        const t = setInterval(function () { setSecs(function (s) { return s + 1; }); }, 1000);
+        return function () { clearInterval(t); };
+      }, [status]);
+
+      function finish() {
+        if (endedRef.current) return;
+        endedRef.current = true;
+        if (convRef.current) { try { convRef.current.endSession(); } catch (e) {} convRef.current = null; }
+        setStatus("ended");
+        setTimeout(function () { onClose(); }, 1100);
+      }
+
+      const mmss = Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2);
+      const statusText = status === "connecting" ? "Connecting…"
+        : status === "active" ? (mode === "speaking" ? "Speaking…" : "Listening…")
+        : status === "ended" ? "Call ended" : "Couldn't connect";
+      const speaking = status === "active" && mode === "speaking";
+
+      return (
+        <div className="fixed inset-0 z-[96] flex flex-col items-center justify-between bg-gradient-to-b from-[#1b0a14] via-[#0a0a0a] to-black px-6 py-14 text-center">
+          <div className="mt-4 text-sm font-semibold uppercase tracking-[0.2em] text-white/40">{status === "active" ? mmss : "Voice call"}</div>
+
+          <div className="flex flex-col items-center">
+            <div className="relative flex h-48 w-48 items-center justify-center">
+              {speaking && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#FF007F]/25" />}
+              {speaking && <span className="absolute inline-flex h-40 w-40 animate-pulse rounded-full bg-[#FF007F]/15" />}
+              {status === "connecting" && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#00E5FF]/25" />}
+              <div className="relative h-36 w-36 overflow-hidden rounded-full transition-all duration-300" style={{ boxShadow: speaking ? "0 0 0 3px #FF007F, 0 0 50px rgba(255,0,127,.75)" : "0 0 0 3px rgba(255,0,127,.7), 0 0 28px rgba(255,0,127,.45)" }}>
+                <img src={posterOf(profile.id)} alt={profile.name} className="h-full w-full object-cover" />
+              </div>
+            </div>
+            <div className="mt-7 font-display text-3xl font-bold text-white">{profile.name}</div>
+            <div className="mt-2 flex items-center gap-2 text-sm text-white/55">
+              {status === "active" && <span className={"h-2 w-2 rounded-full " + (speaking ? "bg-[#FF007F] shadow-[0_0_8px_#FF007F]" : "bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]")} />}
+              {statusText}
+            </div>
+            {status === "error" && <div className="mt-2 max-w-[260px] text-xs text-white/40">Make sure microphone access is allowed, then try again.</div>}
+          </div>
+
+          <div className="mb-4 flex items-center justify-center">
+            <button onClick={finish} aria-label="End call" className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-90" style={{ boxShadow: "0 0 26px rgba(239,68,68,.6)" }}>
+              <span style={{ transform: "rotate(135deg)", display: "inline-flex" }}><PhoneIcon /></span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     function Conversation({ profile, onBack, user, requireAuth }) {
       const [msgs, setMsgs] = useState(() => profile.sends ? [{ from: "them", text: profile.preview }] : []);
       const [text, setText] = useState("");
@@ -936,19 +1037,7 @@
               <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-full rounded-xl object-contain" />
             </div>
           )}
-          {callOpen && (
-            <div className="fixed inset-0 z-[96] flex flex-col items-center justify-center bg-black/95 px-6 text-center">
-              <div className="h-32 w-32 overflow-hidden rounded-full" style={{ boxShadow: "0 0 0 3px #FF007F, 0 0 34px rgba(255,0,127,.55)" }}>
-                <img src={posterOf(profile.id)} alt={profile.name} className="h-full w-full object-cover" />
-              </div>
-              <div className="mt-5 font-display text-2xl font-bold text-white">{profile.name}</div>
-              <div className="mt-1 text-sm text-white/50">Press the call button to start talking</div>
-              <div className="mt-8 flex justify-center">
-                <elevenlabs-convai agent-id={VOICE_AGENT_ID}></elevenlabs-convai>
-              </div>
-              <button onClick={() => setCallOpen(false)} className="mt-10 rounded-full bg-white/10 px-7 py-3 text-sm font-semibold text-white/80 transition-transform hover:bg-white/15 active:scale-95">Close</button>
-            </div>
-          )}
+          {callOpen && <VoiceCall profile={profile} onClose={() => setCallOpen(false)} />}
         </div>
       );
     }
