@@ -742,20 +742,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     var VOICE_OPENERS = [
-      "Hey, it's {name}... I was hoping you'd call.",
-      "Heyyy, it's {name}. Took you long enough to call me.",
-      "Mmm hi you... it's {name}. I've been thinking about you.",
-      "Hi... it's {name}. I'm so happy to hear your voice.",
-      "Well hello there. It's {name}. Miss me?",
-      "Hey stranger, it's {name}. What took you so long?",
-      "Oh hey... it's {name}. Perfect timing, I was getting bored.",
-      "Hi babe, it's {name}. I was just about to text you.",
-      "Heyy, it's {name}. So... what are you up to?",
-      "Mmm, it's {name}. I love that you called instead of texting.",
+      "Hey you... I was hoping you'd call.",
+      "Heyyy. Took you long enough to call me.",
+      "Mmm hi... I've been thinking about you.",
+      "Hi... I'm so happy to hear your voice.",
+      "Well hello there. Miss me?",
+      "Hey stranger. What took you so long?",
+      "Oh hey... perfect timing, I was getting bored.",
+      "Hi babe. I was just about to text you.",
+      "Heyy. So... what are you up to?",
+      "Mmm, I love that you called instead of texting.",
+      "There you are. I was wondering when you'd call.",
+      "Hey... I almost didn't think you'd actually call.",
     ];
     function voiceOpener(name) {
-      var line = VOICE_OPENERS[Math.floor(Math.random() * VOICE_OPENERS.length)];
-      return line.split("{name}").join(name);
+      return VOICE_OPENERS[Math.floor(Math.random() * VOICE_OPENERS.length)];
     }
 
     function voicePersona(p) {
