@@ -749,7 +749,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const endedRef = useRef(false);
 
       useEffect(() => {
-        let cancelled = false;
+        let stopped = false;
+        let conv = null;
 
         function getConv() { return (window.__ElevenLabs && window.__ElevenLabs.Conversation) || null; }
         function waitForSDK() {
@@ -764,26 +765,31 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         }
 
         async function start() {
+          // prompt for mic permission, then release it (the SDK re-acquires it itself)
+          try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(function (t) { t.stop(); }); }
+          catch (e) { if (!stopped) setStatus("error"); return; }
+          const Conversation = await waitForSDK();
+          if (stopped) return;
+          if (!Conversation) { setStatus("error"); return; }
           try {
-            try { await navigator.mediaDevices.getUserMedia({ audio: true }); }
-            catch (e) { if (!cancelled) setStatus("error"); return; }
-            const Conversation = await waitForSDK();
-            if (cancelled) return;
-            if (!Conversation) { setStatus("error"); return; }
-            const conv = await Conversation.startSession({
+            const c = await Conversation.startSession({
               agentId: VOICE_AGENT_ID,
-              onConnect: function () { if (!cancelled) setStatus("active"); },
-              onDisconnect: function () { if (!cancelled) finish(); },
-              onModeChange: function (m) { if (cancelled) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
-              onError: function () { if (!cancelled) setStatus("error"); },
+              connectionType: "websocket",
+              onConnect: function () { if (!stopped) setStatus("active"); },
+              onDisconnect: function () { if (!stopped) finish(); },
+              onModeChange: function (m) { if (stopped) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
+              onError: function () { if (!stopped) setStatus("error"); },
             });
-            convRef.current = conv;
-          } catch (e) { if (!cancelled) setStatus("error"); }
+            conv = c;
+            if (stopped) { try { c.endSession(); } catch (e) {} return; }
+            convRef.current = c;
+          } catch (e) { if (!stopped) setStatus("error"); }
         }
         start();
 
         return function () {
-          cancelled = true;
+          stopped = true;
+          if (conv) { try { conv.endSession(); } catch (e) {} }
           if (convRef.current) { try { convRef.current.endSession(); } catch (e) {} convRef.current = null; }
         };
       }, []);
