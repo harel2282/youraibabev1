@@ -59,16 +59,20 @@ export default async function handler(req, res) {
       return res.status(200).json({ status: status, url: url });
     }
 
-    // ---- SUBMIT: POST { profileId, scene } ----
+    // ---- SUBMIT: POST { profileId, scene, referenceUrl } ----
     if (req.method === "POST") {
       const body = req.body || {};
       const profileId = body.profileId;
       const scene = body.scene;
       if (profileId == null) return res.status(400).json({ error: "Missing profileId" });
 
+      // The client passes the exact reference image URL (handles .png vs .jpg per girl);
+      // fall back to the legacy "{id}.jpg" convention if it wasn't provided.
+      const refUrl = (typeof body.referenceUrl === "string" && body.referenceUrl) ? body.referenceUrl : referenceUrlFor(profileId);
+
       const payload = {
         prompt: buildPrompt(scene),
-        images: [referenceUrlFor(profileId)],
+        images: [refUrl],
         enable_base64_output: false,
         enable_sync_mode: false,
       };

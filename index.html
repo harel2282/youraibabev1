@@ -158,7 +158,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     const GUEST_LIKES_KEY = "yab_guest_likes";
     function readGuestLikes() { try { var r = localStorage.getItem(GUEST_LIKES_KEY); return r ? JSON.parse(r) : []; } catch (e) { return []; } }
     function writeGuestLikes(ids) { try { localStorage.setItem(GUEST_LIKES_KEY, JSON.stringify(ids)); } catch (e) {} }
-    function idToProfile(id) { return PROFILES.find(function (p) { return p.id === id; }); }
+    function idToProfile(id) { return PROFILE_INDEX[id]; }
     const GUEST_ME = { name: "Guest", age: null, city: "", job: "", gender: "Woman", bio: "", interests: [] };
     function fmtTime(iso) {
       if (!iso) return "";
@@ -189,6 +189,30 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         bio: "Cybersecurity nerd. Probably already knows your wifi password.", tags: ["Tech", "Climbing", "Sci-fi", "Coffee"],
         prompts: [{ q: "Don't worry, I won't", a: "Actually read your texts. Probably." }, { q: "Best way to my heart", a: "Strong passwords and stronger coffee." }] },
     ];
+
+    // Registry of every known profile (hardcoded + loaded from the database), keyed by id.
+    var PROFILE_INDEX = {};
+    PROFILES.forEach(function (p) { PROFILE_INDEX[p.id] = p; });
+    const STORAGE_BASE = SUPABASE_URL + "/storage/v1/object/public/";
+    function dbRowToProfile(row) {
+      return {
+        id: row.id,
+        name: row.name,
+        age: row.age,
+        city: row.city || "",
+        distance: row.country || row.city || "",
+        job: row.job || "",
+        height: row.height || "",
+        zodiac: row.zodiac || "",
+        lookingFor: row.looking_for || "",
+        bio: row.bio || "",
+        tags: Array.isArray(row.tags) ? row.tags : [],
+        prompts: Array.isArray(row.prompts) ? row.prompts : [],
+        videoFile: row.video_file || null,
+        imageFile: row.image_file || null,
+        fromDb: true,
+      };
+    }
 
     const SWIPE_DISTANCE = 100;
     const SWIPE_VELOCITY = 500;
@@ -321,7 +345,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       return (
         <button onClick={onClick} className="relative block aspect-[3/4] overflow-hidden rounded-2xl bg-zinc-900 text-left transition-transform active:scale-95"
           style={{ boxShadow: "inset 0 0 0 1px rgba(255,0,127,.25)" }}>
-          <img src={posterOf(p.id)} alt={p.name} draggable="false" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={posterOf(p.id)} alt={p.name} draggable="false" loading="lazy" className="absolute inset-0 h-full w-full object-cover" />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-transparent" />
           <div className="absolute inset-x-3 bottom-2">
             <div className="font-display text-base font-bold leading-tight">{p.name} <span className="text-sm font-light text-white/80">{p.age}</span></div>
@@ -582,11 +606,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     /* --------------------------- Home --------------------------- */
-    function HomeScreen({ onLike, onUndoLike, onOpenDetail, active }) {
-      const [stack, setStack] = useState(PROFILES);
+    function HomeScreen({ onLike, onUndoLike, onOpenDetail, active, profiles }) {
+      const [stack, setStack] = useState(profiles);
       const [leaving, setLeaving] = useState([]);
       const [history, setHistory] = useState([]);
       const [enter, setEnter] = useState(null);
+      // When the database girls finish loading, refresh the deck with the full list.
+      useEffect(() => { setStack(profiles); setLeaving([]); setHistory([]); setEnter(null); }, [profiles]);
       const leavingIds = new Set(leaving.map((l) => l.id));
       const live = stack.filter((p) => !leavingIds.has(p.id));
       const topId = live[0] ? live[0].id : null;
@@ -613,7 +639,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         if (last.dir === "right") onUndoLike(last.profile.id);
         setTimeout(() => setEnter(null), 500);
       };
-      const reset = () => { setStack(PROFILES); setLeaving([]); setHistory([]); setEnter(null); };
+      const reset = () => { setStack(profiles); setLeaving([]); setHistory([]); setEnter(null); };
 
       useEffect(() => {
         const onKey = (e) => {
@@ -651,13 +677,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     /* -------------------------- Explore -------------------------- */
-    function ExploreScreen({ onOpen }) {
+    function ExploreScreen({ onOpen, profiles }) {
       return (
         <div className="no-scrollbar h-full overflow-y-auto px-4 pt-2 pb-6">
           <h2 className="mb-0.5 font-display text-2xl font-bold">Explore</h2>
           <p className="mb-4 text-sm text-white/50">Fresh faces near you</p>
           <div className="grid grid-cols-2 gap-3">
-            {PROFILES.map((p) => <GridCard key={p.id} p={p} onClick={() => onOpen(p)} />)}
+            {profiles.map((p) => <GridCard key={p.id} p={p} onClick={() => onOpen(p)} />)}
           </div>
         </div>
       );
@@ -827,9 +853,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, a little flirty and natural — like a real person on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries."
+        "If anyone asks your name, your name is " + p.name + ". Keep everything tasteful."
       );
     }
 
@@ -1096,7 +1122,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       };
       const generatePhoto = (scene) => {
         setMsgs((prev) => [...prev, { from: "them", generating: true }]);
-        fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: profile.id, scene: scene }) })
+        const refFile = profile.imageFile || (profile.id + ".jpg");
+        const referenceUrl = STORAGE_BASE + "references/" + refFile;
+        fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: profile.id, scene: scene, referenceUrl: referenceUrl }) })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("submit failed"))))
           .then((d) => { if (!d || !d.requestId) throw new Error("no id"); pollPhoto(d.requestId, 0); })
           .catch(() => failPhoto());
@@ -1935,6 +1963,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [wallet, setWallet] = useState(null);
       const [shop, setShop] = useState(null);
       const [toast, setToast] = useState(null);
+      const [dbGirls, setDbGirls] = useState([]);
       const walletRef = useRef(null);
       const user = session ? session.user : null;
 
@@ -1966,7 +1995,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         }
         load();
         return function () { cancelled = true; };
-      }, [user]);
+      }, [user, dbGirls]);
 
       // Load the signed-in user's editable profile (name, age, bio…) from the database.
       useEffect(() => {
@@ -2013,6 +2042,27 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         }
         return function () { cancelled = true; };
       }, [user]);
+
+      // Load database-driven girls and register their media (videos + reference images).
+      useEffect(() => {
+        if (!sb) return;
+        let cancelled = false;
+        sb.from("girls").select("*").eq("active", true).order("sort", { ascending: true }).then(function (res) {
+          if (cancelled || !res.data) return;
+          window.MEDIA = window.MEDIA || {};
+          window.POSTERS = window.POSTERS || {};
+          const mapped = res.data.map(dbRowToProfile);
+          mapped.forEach(function (p) {
+            PROFILE_INDEX[p.id] = p;
+            if (p.videoFile) window.MEDIA[p.id] = STORAGE_BASE + "girl-videos/" + p.videoFile;
+            if (p.imageFile) window.POSTERS[p.id] = STORAGE_BASE + "references/" + p.imageFile;
+          });
+          setDbGirls(mapped);
+        });
+        return function () { cancelled = true; };
+      }, []);
+
+      const allProfiles = React.useMemo(function () { return dbGirls.concat(PROFILES); }, [dbGirls]);
 
       const showToast = (msg) => { setToast(msg); setTimeout(function () { setToast(null); }, 2600); };
       const applyWallet = (next) => {
@@ -2118,9 +2168,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
           <div className="relative flex-1 overflow-hidden">
             <div className={tab === "home" ? "h-full" : "hidden"}>
-              <HomeScreen onLike={addLike} onUndoLike={undoLike} onOpenDetail={setDetailProfile} active={homeActive} />
+              <HomeScreen onLike={addLike} onUndoLike={undoLike} onOpenDetail={setDetailProfile} active={homeActive} profiles={allProfiles} />
             </div>
-            {tab === "explore" && <ExploreScreen onOpen={setDetailProfile} />}
+            {tab === "explore" && <ExploreScreen onOpen={setDetailProfile} profiles={allProfiles} />}
             {tab === "likes" && <LikesScreen liked={liked} goHome={() => setTab("home")} onOpen={setDetailProfile} />}
             {tab === "chats" && <ChatsScreen matches={matches} goHome={() => setTab("home")} openId={chatOpenId} onOpen={setChatOpenId} onBack={() => setChatOpenId(null)} user={user} requireAuth={requireAuth} />}
             {tab === "profile" && <ProfileScreen me={me} setMe={saveMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} />}
