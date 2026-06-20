@@ -827,13 +827,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, a little flirty and natural — like a real person on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries."
+        "If anyone asks your name, your name is " + p.name + ". Keep everything tasteful."
       );
     }
 
-    function VoiceCall({ profile, onClose, onEnded }) {
+    function VoiceCall({ profile, onClose, onEnded, openerHistory }) {
       const [status, setStatus] = useState("connecting"); // connecting | active | ended | error
       const [mode, setMode] = useState("listening"); // speaking | listening
       const [secs, setSecs] = useState(0);
@@ -863,6 +863,17 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           // prompt for mic permission, then release it (the SDK re-acquires it itself)
           try { const s = await navigator.mediaDevices.getUserMedia({ audio: true }); s.getTracks().forEach(function (t) { t.stop(); }); }
           catch (e) { if (!stopped) setStatus("error"); return; }
+
+          // If there was recent chat, ask the backend for an opener that follows up on it.
+          let firstMessage = voiceOpener(profile.name);
+          if (openerHistory && openerHistory.length) {
+            try {
+              const ro = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: { name: profile.name }, messages: openerHistory, mode: "voice_opener" }) });
+              if (ro.ok) { const dop = await ro.json(); if (dop && dop.opener) firstMessage = dop.opener; }
+            } catch (e) {}
+          }
+          if (stopped) return;
+
           const Conversation = await waitForSDK();
           if (stopped) return;
           if (!Conversation) { setStatus("error"); return; }
@@ -873,7 +884,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               overrides: {
                 agent: {
                   prompt: { prompt: voicePersona(profile) },
-                  firstMessage: voiceOpener(profile.name),
+                  firstMessage: firstMessage,
                 },
               },
               onConnect: function () { if (!stopped) { connectedRef.current = true; setStatus("active"); if (econ) econ.trySpend(PRICE_VOICE_MIN); } },
@@ -968,6 +979,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [typing, setTyping] = useState(false);
       const scroller = useRef(null);
       const galleryRef = useRef(null);
+      const lastMsgAtRef = useRef(null);
       const [menuOpen, setMenuOpen] = useState(false);
       const [cameraOpen, setCameraOpen] = useState(false);
       const [lightbox, setLightbox] = useState(null);
@@ -977,14 +989,18 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       useEffect(() => {
         let cancelled = false;
         if (user && sb) {
-          sb.from("messages").select("sender,content").eq("profile_id", profile.id).order("created_at", { ascending: true }).then(function (res) {
+          sb.from("messages").select("sender,content,created_at").eq("profile_id", profile.id).order("created_at", { ascending: true }).then(function (res) {
             if (cancelled) return;
             const rows = res.data || [];
-            if (rows.length) setMsgs(rows.map(function (r) {
-              if (typeof r.content === "string" && r.content.indexOf("[call]") === 0) return { from: r.sender, call: true };
-              if (typeof r.content === "string" && r.content.indexOf("[img]") === 0) return { from: r.sender, media: { type: "image", url: r.content.slice(5) } };
-              return { from: r.sender, text: r.content };
-            }));
+            if (rows.length) {
+              setMsgs(rows.map(function (r) {
+                if (typeof r.content === "string" && r.content.indexOf("[call]") === 0) return { from: r.sender, call: true };
+                if (typeof r.content === "string" && r.content.indexOf("[img]") === 0) return { from: r.sender, media: { type: "image", url: r.content.slice(5) } };
+                return { from: r.sender, text: r.content };
+              }));
+              const lastTs = rows[rows.length - 1].created_at;
+              if (lastTs) lastMsgAtRef.current = new Date(lastTs).getTime();
+            }
           });
         }
         return function () { cancelled = true; };
@@ -996,6 +1012,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const REPLIES = ["Haha I like the way you think 😄", "Tell me more about you", "You're cute, you know that?", "What are you up to later?", "I'm into music and late-night drives. You?", "Good answer 😉"];
 
       const saveMsg = (sender, content) => {
+        lastMsgAtRef.current = Date.now();
         if (user && sb && content) {
           sb.from("messages").insert([{ user_id: user.id, profile_id: profile.id, sender: sender, content: content }]).then(function () {});
         }
@@ -1100,6 +1117,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         if (!file) return;
         if (!user) { requireAuth(); return; }
         if (econ && !econ.spend(PRICE_MESSAGE)) return;
+        lastMsgAtRef.current = Date.now();
         const type = (file.type || "").startsWith("video") ? "video" : "image";
         const next = [...msgs, { from: "me", media: { type, url: URL.createObjectURL(file) } }];
         setMsgs(next);
@@ -1183,7 +1201,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-full rounded-xl object-contain" />
             </div>
           )}
-          {callOpen && <VoiceCall profile={profile} onClose={() => setCallOpen(false)} onEnded={onCallEnded} />}
+          {callOpen && <VoiceCall profile={profile} onClose={() => setCallOpen(false)} onEnded={onCallEnded} openerHistory={(lastMsgAtRef.current && (Date.now() - lastMsgAtRef.current < 3600000)) ? toHistory(msgs).slice(-12) : null} />}
         </div>
       );
     }
