@@ -62,12 +62,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
   .typing-dot:nth-child(2){ animation-delay:.2s; }
   .typing-dot:nth-child(3){ animation-delay:.4s; }
   @media (prefers-reduced-motion: reduce) { .typing-dot { animation:none; } }
-  @keyframes In { from { opacity:0 } to { opacity:1 } }
+  @keyframes matchIn { from { opacity:0 } to { opacity:1 } }
   @keyframes popIn { 0%{ transform:scale(0); opacity:0 } 60%{ transform:scale(1.18); opacity:1 } 100%{ transform:scale(1); opacity:1 } }
   @keyframes slideLIn { from{ transform:translateX(-70px); opacity:0 } to{ transform:translateX(0); opacity:1 } }
   @keyframes slideRIn { from{ transform:translateX(70px); opacity:0 } to{ transform:translateX(0); opacity:1 } }
   @keyframes riseIn { from{ transform:translateY(22px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
-  .anim-{ animation: matchIn .28s ease both; }
+  .anim-match{ animation: matchIn .28s ease both; }
   .anim-pop{ animation: popIn .6s cubic-bezier(.2,.9,.3,1.3) both; }
   .anim-slideL{ animation: slideLIn .5s cubic-bezier(.2,.8,.25,1) both; }
   .anim-slideR{ animation: slideRIn .5s cubic-bezier(.2,.8,.25,1) both; }
@@ -127,6 +127,30 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     /* --------------------------- Supabase --------------------------- */
     const SUPABASE_URL = "https://nmkonmvcqcejhrqjmcqv.supabase.co";
     const VOICE_AGENT_ID = "agent_0301kvey7t08exzt22xdaf5qjnpn";
+
+    // ---------- Economy (BABE Coins) ----------
+    const EconomyContext = React.createContext(null);
+    const PRICE_MESSAGE = 1;
+    const PRICE_IMAGE = 10;
+    const PRICE_VOICE_MIN = 30;
+    const START_COINS = 50;
+    const FREE_SWIPES = 15;
+    const SWIPE_WINDOW_MS = 24 * 60 * 60 * 1000;
+    var PLAN_INFO = {
+      premium_m: { tier: "premium", label: "Premium", priceMo: "$19.99", was: "$39.99", billed: "Billed $19.99 monthly.", cycle: "monthly", grant: 1000, bonus: 0 },
+      premium_y: { tier: "premium", label: "Premium", priceMo: "$9.99", was: "$39.99", billed: "Billed $119.88 yearly.", note: "Save $120/yr + 1,000 bonus coins", cycle: "yearly", grant: 1000, bonus: 1000 },
+      deluxe_m: { tier: "deluxe", label: "Deluxe", priceMo: "$59.99", was: "$119.99", billed: "Billed $59.99 monthly.", cycle: "monthly", grant: 5000, bonus: 0 },
+      deluxe_y: { tier: "deluxe", label: "Deluxe", priceMo: "$29.99", was: "$119.99", billed: "Billed $359.88 yearly.", note: "Save $360/yr + 5,000 bonus coins", cycle: "yearly", grant: 5000, bonus: 5000 },
+    };
+    var COIN_PACKS = [
+      { coins: 100, price: "$9.99" },
+      { coins: 350, price: "$24.99", popular: true },
+      { coins: 1000, price: "$49.99" },
+    ];
+    function CoinIcon(props) {
+      var s = (props && props.size) || 16;
+      return (<svg viewBox="0 0 24 24" width={s} height={s} fill="none"><circle cx="12" cy="12" r="9" fill="#FFB627" /><circle cx="12" cy="12" r="6.4" fill="none" stroke="#7a5200" strokeWidth="1.4" opacity="0.5" /><text x="12" y="16" textAnchor="middle" fontSize="9" fontWeight="bold" fill="#7a5200">B</text></svg>);
+    }
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ta29ubXZjcWNlamhycWptY3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MjU3MDAsImV4cCI6MjA5NzMwMTcwMH0.tJ1gBIR9xI3Yu5PnY-8EYuHGl4vtIUiGRshq54GY6iY";
     const sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
@@ -803,19 +827,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, a little flirty and natural — like a real person on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries."
+        "If anyone asks your name, your name is " + p.name + ". Keep everything tasteful."
       );
     }
 
-    function VoiceCall({ profile, onClose }) {
+    function VoiceCall({ profile, onClose, onEnded }) {
       const [status, setStatus] = useState("connecting"); // connecting | active | ended | error
       const [mode, setMode] = useState("listening"); // speaking | listening
       const [secs, setSecs] = useState(0);
       const convRef = useRef(null);
       const endedRef = useRef(false);
       const ringRef = useRef(null);
+      const connectedRef = useRef(false);
+      const econ = React.useContext(EconomyContext);
 
       useEffect(() => {
         let stopped = false;
@@ -850,7 +876,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                   firstMessage: voiceOpener(profile.name),
                 },
               },
-              onConnect: function () { if (!stopped) setStatus("active"); },
+              onConnect: function () { if (!stopped) { connectedRef.current = true; setStatus("active"); if (econ) econ.trySpend(PRICE_VOICE_MIN); } },
               onDisconnect: function () { if (!stopped) finish(); },
               onModeChange: function (m) { if (stopped) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
               onError: function () { if (!stopped) setStatus("error"); },
@@ -882,10 +908,19 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         return function () { if (ringRef.current) ringRef.current.stop(); };
       }, [status]);
 
+      useEffect(function () {
+        if (status !== "active") return;
+        const t = setInterval(function () {
+          if (econ && !econ.trySpend(PRICE_VOICE_MIN)) { finish(); }
+        }, 60000);
+        return function () { clearInterval(t); };
+      }, [status]);
+
       function finish() {
         if (endedRef.current) return;
         endedRef.current = true;
         if (convRef.current) { try { convRef.current.endSession(); } catch (e) {} convRef.current = null; }
+        if (connectedRef.current && onEnded) { try { onEnded(); } catch (e) {} }
         setStatus("ended");
         setTimeout(function () { onClose(); }, 1100);
       }
@@ -927,6 +962,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     function Conversation({ profile, onBack, user, requireAuth }) {
+      const econ = React.useContext(EconomyContext);
       const [msgs, setMsgs] = useState(() => profile.sends ? [{ from: "them", text: profile.preview }] : []);
       const [text, setText] = useState("");
       const [typing, setTyping] = useState(false);
@@ -945,6 +981,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             if (cancelled) return;
             const rows = res.data || [];
             if (rows.length) setMsgs(rows.map(function (r) {
+              if (typeof r.content === "string" && r.content.indexOf("[call]") === 0) return { from: r.sender, call: true };
               if (typeof r.content === "string" && r.content.indexOf("[img]") === 0) return { from: r.sender, media: { type: "image", url: r.content.slice(5) } };
               return { from: r.sender, text: r.content };
             }));
@@ -964,7 +1001,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         }
       };
 
+      const onCallEnded = () => {
+        setMsgs(function (prev) { return prev.concat([{ from: "me", call: true }]); });
+        saveMsg("me", "[call]");
+      };
+
       const toHistory = (list) => list
+        .filter((m) => !m.call)
         .map((m) => ({ role: m.from === "me" ? "user" : "assistant", content: m.media ? "(sent a photo)" : (m.text || "") }))
         .filter((m) => m.content);
 
@@ -981,6 +1024,14 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             setTyping(false);
             if (d && d.image) {
               const cap = d.caption || "Here you go 😊";
+              if (econ && econ.loggedIn && econ.coins < PRICE_IMAGE) {
+                const poor = "I'd love to send you a pic 😋 but you're out of coins — top up and ask me again?";
+                setMsgs((prev) => [...prev, { from: "them", text: poor }]);
+                saveMsg("them", poor);
+                econ.openShop("coins");
+                return;
+              }
+              if (econ) econ.trySpend(PRICE_IMAGE);
               setMsgs((prev) => [...prev, { from: "them", text: cap }]);
               saveMsg("them", cap);
               generatePhoto(d.scene || "");
@@ -1038,6 +1089,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         const t = text.trim();
         if (!t) return;
         if (!user) { requireAuth(); return; }
+        if (econ && !econ.spend(PRICE_MESSAGE)) return;
         setText("");
         const next = [...msgs, { from: "me", text: t }];
         setMsgs(next);
@@ -1047,6 +1099,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const sendMedia = (file) => {
         if (!file) return;
         if (!user) { requireAuth(); return; }
+        if (econ && !econ.spend(PRICE_MESSAGE)) return;
         const type = (file.type || "").startsWith("video") ? "video" : "image";
         const next = [...msgs, { from: "me", media: { type, url: URL.createObjectURL(file) } }];
         setMsgs(next);
@@ -1063,7 +1116,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <div className="font-display font-bold">{profile.name}</div>
             <div className="ml-auto mr-1 flex items-center gap-2.5">
               <span className="flex items-center gap-1.5 text-xs text-white/45"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />online</span>
-              <button onClick={() => { if (!user) { requireAuth(); return; } setCallOpen(true); }} aria-label="Voice call" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/15 text-[#FF007F] transition-transform hover:bg-[#FF007F]/25 active:scale-90" style={{ boxShadow: "0 0 12px rgba(255,0,127,.25)" }}><PhoneIcon /></button>
+              <button onClick={() => { if (!user) { requireAuth(); return; } if (econ && econ.coins < PRICE_VOICE_MIN) { econ.openShop("coins"); return; } setCallOpen(true); }} aria-label="Voice call" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/15 text-[#FF007F] transition-transform hover:bg-[#FF007F]/25 active:scale-90" style={{ boxShadow: "0 0 12px rgba(255,0,127,.25)" }}><PhoneIcon /></button>
             </div>
           </div>
           <div ref={scroller} className="no-scrollbar flex-1 space-y-2 overflow-y-auto px-3 py-4">
@@ -1077,8 +1130,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               </div>
             )}
             {msgs.map((m, i) => (
-              <div key={i} className={"flex " + (m.from === "me" ? "justify-end" : "justify-start")}>
-                {m.generating ? (
+              <div key={i} className={"flex " + (m.call ? "justify-center" : (m.from === "me" ? "justify-end" : "justify-start"))}>
+                {m.call ? (
+                  <div className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-1.5 text-xs text-white/50" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)" }}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .58 3.6 1 1 0 0 1-.24 1z" /></svg>
+                    <span>Voice call</span>
+                  </div>
+                ) : m.generating ? (
                   <div className="flex items-center gap-2.5 rounded-2xl rounded-bl-md bg-zinc-800 px-4 py-3 text-[15px] text-white/70" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,.1)" }}>
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-[#FF007F]" />
                     <span>Sending a photo…</span>
@@ -1125,7 +1183,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-full rounded-xl object-contain" />
             </div>
           )}
-          {callOpen && <VoiceCall profile={profile} onClose={() => setCallOpen(false)} />}
+          {callOpen && <VoiceCall profile={profile} onClose={() => setCallOpen(false)} onEnded={onCallEnded} />}
         </div>
       );
     }
@@ -1156,6 +1214,15 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const previewText = (m) => {
         const last = lastMsgs[m.id];
         if (last) {
+          const isCall = typeof last.content === "string" && last.content.indexOf("[call]") === 0;
+          if (isCall) {
+            return (
+              <span className="inline-flex items-center gap-1 align-middle">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .58 3.6 1 1 0 0 1-.24 1z" /></svg>
+                <span>Voice call</span>
+              </span>
+            );
+          }
           const isImg = typeof last.content === "string" && last.content.indexOf("[img]") === 0;
           if (isImg) {
             return (
@@ -1480,7 +1547,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [open, setOpen] = useState(-1);
       const faqs = [
         { q: "How do matches work?", a: "When you like someone and they like you back, it's a match. Some matches message you first; for the rest, you break the ice." },
-        { q: "What is Your AI Babe Gold?", a: "Gold unlocks unlimited likes, seeing who liked you, and rewinding your last swipe." },
+        { q: "What is Your AI Babe Premium?", a: "Premium and Deluxe give you unlimited likes plus monthly BABE Coins, which you spend on messages, AI photos and voice calls." },
         { q: "How do I rewind a swipe?", a: "Tap the gold rewind button on the left of the action bar to bring back your last card." },
         { q: "How do I report someone?", a: "Open their profile, tap the menu, and choose Report. Our team reviews every report." },
       ];
@@ -1514,6 +1581,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
     /* -------------------------- Profile -------------------------- */
     function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView, user, onLogin, onLogout }) {
+      const econ = React.useContext(EconomyContext);
       if (view === "edit") return <ProfileEdit me={me} onSave={setMe} onBack={() => setView(null)} />;
       if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} user={user} onLogout={onLogout} />;
       if (view === "notifications") return <NotificationsScreen notifs={notifs} setNotifs={setNotifs} onBack={() => setView(null)} />;
@@ -1559,11 +1627,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             </button>
           )}
 
-          <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
-            <div className="font-display text-lg font-bold">Your AI Babe <span className="text-[#FF007F]">Gold</span></div>
-            <p className="mt-1 text-sm text-white/65">Unlimited likes, see who liked you, and rewind your last swipe.</p>
-            <button className="mt-3 w-full rounded-full bg-[#FF007F] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>Upgrade</button>
-          </div>
+          {user ? (
+            econ && econ.isPaid ? (
+              <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,182,39,.18), rgba(255,0,127,.12))", boxShadow: "inset 0 0 0 1px rgba(255,182,39,.45)" }}>
+                <div className="font-display text-lg font-bold">You're <span className="text-[#FFB627]">{(econ.plan && econ.plan.indexOf("deluxe") === 0) ? "Deluxe" : "Premium"}</span> 💎</div>
+                <p className="mt-1 text-sm text-white/65">Unlimited likes, plus your monthly BABE Coins for chats, photos and calls.</p>
+                <button onClick={() => econ.openShop()} className="mt-3 w-full rounded-full bg-[#FFB627] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-black transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,182,39,.5)" }}>Get more coins</button>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
+                <div className="font-display text-lg font-bold">Your AI Babe <span className="text-[#FF007F]">Premium</span></div>
+                <p className="mt-1 text-sm text-white/65">Unlimited likes, plus monthly BABE Coins for messages, photos and voice calls.</p>
+                <button onClick={() => econ && econ.openShop()} className="mt-3 w-full rounded-full bg-[#FF007F] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>Upgrade</button>
+              </div>
+            )
+          ) : null}
 
           <div className="mt-6 overflow-hidden rounded-2xl bg-white/[0.04]">
             {rows.map((r, i) => (
@@ -1700,6 +1778,16 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <h2 className="font-display text-2xl font-bold">{mode === "signup" ? "Create your account" : "Welcome back"}</h2>
             <p className="mt-1 mb-5 text-sm text-white/55">{mode === "signup" ? "Sign up to start chatting with your matches." : "Log in to continue your conversations."}</p>
 
+            {mode === "signup" ? (
+              <div className="mb-5 flex items-center gap-3 rounded-2xl bg-[#FFB627]/10 px-4 py-3" style={{ boxShadow: "inset 0 0 0 1px rgba(255,182,39,.3)" }}>
+                <CoinIcon size={30} />
+                <div className="text-sm leading-tight">
+                  <div className="font-bold text-[#FFB627]">50 BABE Coins free 🎁</div>
+                  <div className="text-white/50">Get them instantly when you sign up.</div>
+                </div>
+              </div>
+            ) : null}
+
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"
               className="mb-3 w-full rounded-xl bg-white/[0.06] px-4 py-3 text-[15px] text-white outline-none focus:ring-2 focus:ring-[#FF007F]/50" />
@@ -1726,6 +1814,93 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       );
     }
 
+    function Toast({ text }) {
+      return (
+        <div className="pointer-events-none fixed inset-x-0 top-6 z-[120] flex justify-center px-4">
+          <div className="anim-up rounded-full bg-[#FF007F] px-5 py-2.5 text-sm font-bold text-white" style={{ boxShadow: "0 8px 30px rgba(255,0,127,.5)" }}>{text}</div>
+        </div>
+      );
+    }
+
+    function CoinPill({ coins, onClick }) {
+      return (
+        <button onClick={onClick} className="flex items-center gap-1.5 rounded-full bg-[#FFB627]/15 px-3 py-1.5 text-sm font-bold text-[#FFB627] transition-transform active:scale-90" style={{ boxShadow: "inset 0 0 0 1px rgba(255,182,39,.35)" }}>
+          <CoinIcon size={16} />
+          <span>{coins}</span>
+        </button>
+      );
+    }
+
+    function ShopModal({ reason, plan, onClose, onSubscribe, onBuyPack }) {
+      const [cycle, setCycle] = useState("yearly");
+      const [sel, setSel] = useState("premium");
+      const key = sel + (cycle === "yearly" ? "_y" : "_m");
+      const info = PLAN_INFO[key];
+      const reasonText = reason === "coins" ? "You're out of BABE Coins" : reason === "swipes" ? "You're out of free likes for today" : null;
+
+      function planCard(tier) {
+        const k = tier + (cycle === "yearly" ? "_y" : "_m");
+        const pi = PLAN_INFO[k];
+        const active = sel === tier;
+        const isDeluxe = tier === "deluxe";
+        const owned = plan === k;
+        return (
+          <button onClick={() => setSel(tier)} className="relative flex-1 rounded-2xl p-4 text-left transition-all"
+            style={{ background: active ? (isDeluxe ? "rgba(255,182,39,.08)" : "rgba(255,0,127,.08)") : "rgba(255,255,255,.03)", boxShadow: active ? (isDeluxe ? "inset 0 0 0 2px #FFB627" : "inset 0 0 0 2px #FF007F") : "inset 0 0 0 1px rgba(255,255,255,.08)" }}>
+            {isDeluxe && <span className="absolute -top-2 right-3 rounded-full bg-[#FFB627] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-black" style={{ boxShadow: "0 0 14px rgba(255,182,39,.7)" }}>Best Value</span>}
+            <div className={"text-sm font-bold " + (isDeluxe ? "text-[#FFB627]" : "text-[#FF007F]")}>{pi.label}</div>
+            <div className="mt-1 flex items-end gap-1"><span className="font-display text-2xl font-extrabold text-white">{pi.priceMo}</span><span className="pb-1 text-xs text-white/40">/mo</span></div>
+            <div className="text-xs text-white/30 line-through">{pi.was}/mo</div>
+            {cycle === "yearly" ? <div className="mt-1 text-xs font-semibold text-emerald-400">+{pi.bonus.toLocaleString()} bonus coins</div> : null}
+            {owned ? <div className="mt-1 text-[11px] font-bold text-white/60">Current plan</div> : null}
+          </button>
+        );
+      }
+
+      return (
+        <div className="fixed inset-0 z-[110] flex items-end justify-center sm:items-center">
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
+          <div className="anim-sheet no-scrollbar relative z-10 max-h-[92vh] w-full max-w-[440px] overflow-y-auto rounded-t-3xl bg-[#0d0d0f] p-5 pb-8 sm:rounded-3xl" style={{ boxShadow: "0 -10px 60px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.06)" }}>
+            <div className="mb-1 flex items-center justify-between">
+              <h2 className="font-display text-2xl font-extrabold text-white">Go <span className="text-[#FF007F]">Premium</span></h2>
+              <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white hover:bg-white/20">×</button>
+            </div>
+            {reasonText
+              ? <p className="mb-4 text-sm text-[#FFB627]">{reasonText} — unlock more below.</p>
+              : <p className="mb-4 text-sm text-white/45">Unlock everything Your AI Babe has to offer.</p>}
+
+            <div className="mb-4 flex rounded-full bg-white/[0.06] p-1 text-sm font-semibold">
+              <button onClick={() => setCycle("monthly")} className={"flex-1 rounded-full py-2 " + (cycle === "monthly" ? "bg-white/15 text-white" : "text-white/50")}>Monthly</button>
+              <button onClick={() => setCycle("yearly")} className={"flex-1 rounded-full py-2 " + (cycle === "yearly" ? "bg-white/15 text-white" : "text-white/50")}>Yearly <span className="text-emerald-400">Save 50%</span></button>
+            </div>
+
+            <div className="flex gap-3">{planCard("premium")}{planCard("deluxe")}</div>
+            <div className="mt-3 text-center text-xs text-white/40">{info.billed}{info.note ? <div className="mt-0.5 text-emerald-400">{info.note}</div> : null}</div>
+
+            <button onClick={() => onSubscribe(key)} className={"mt-4 w-full rounded-2xl py-3.5 font-bold transition-transform active:scale-[0.98] " + (sel === "deluxe" ? "bg-gradient-to-r from-[#FFB627] to-[#ff9500] text-black" : "bg-gradient-to-r from-[#FF007F] to-[#ff4fa3] text-white")} style={{ boxShadow: sel === "deluxe" ? "0 0 26px rgba(255,182,39,.5)" : "0 0 26px rgba(255,0,127,.5)" }}>
+              Subscribe to {info.label}
+            </button>
+            <p className="mt-2 text-center text-xs text-white/30">Private &amp; secure · Cancel anytime · Demo mode</p>
+
+            <div className="mb-2 mt-7 text-sm font-bold uppercase tracking-wider text-white/40">BABE Coin packs</div>
+            <div className="space-y-2.5">
+              {COIN_PACKS.map(function (pack) {
+                return (
+                  <div key={pack.coins} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3" style={{ boxShadow: pack.popular ? "inset 0 0 0 1.5px rgba(255,0,127,.5)" : "inset 0 0 0 1px rgba(255,255,255,.07)" }}>
+                    <CoinIcon size={26} />
+                    <div className="flex-1">
+                      <div className="font-bold text-white">{pack.coins.toLocaleString()} <span className="text-white/50">coins</span>{pack.popular ? <span className="ml-2 rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase text-[#FF007F]">Popular</span> : null}</div>
+                    </div>
+                    <button onClick={() => onBuyPack(pack.coins)} className="rounded-full bg-[#FF007F] px-4 py-2 text-sm font-bold text-white transition-transform active:scale-90" style={{ boxShadow: "0 0 16px rgba(255,0,127,.4)" }}>{pack.price}</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     function App() {
       const [tab, setTab] = useState("home");
       const [liked, setLiked] = useState([]);
@@ -1739,6 +1914,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [profileView, setProfileView] = useState(null);
       const [session, setSession] = useState(null);
       const [authOpen, setAuthOpen] = useState(false);
+      const [wallet, setWallet] = useState(null);
+      const [shop, setShop] = useState(null);
+      const [toast, setToast] = useState(null);
+      const walletRef = useRef(null);
       const user = session ? session.user : null;
 
       // Watch auth state.
@@ -1798,6 +1977,66 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const goTab = (t) => { setProfileView(null); setChatOpenId(null); setTab(t); };
       const requireAuth = () => setAuthOpen(true);
 
+      // Load (or create) the user's wallet.
+      useEffect(() => {
+        let cancelled = false;
+        if (user && sb) {
+          sb.from("wallets").select("coins,plan,swipes_used,swipes_reset").eq("user_id", user.id).maybeSingle().then(function (res) {
+            if (cancelled) return;
+            if (res.data) { walletRef.current = res.data; setWallet(res.data); }
+            else {
+              const w = { coins: START_COINS, plan: "free", swipes_used: 0, swipes_reset: new Date().toISOString() };
+              sb.from("wallets").insert([{ user_id: user.id, coins: w.coins, plan: w.plan, swipes_used: 0, swipes_reset: w.swipes_reset }]).then(function () {});
+              walletRef.current = w; setWallet(w);
+            }
+          });
+        } else {
+          walletRef.current = null; setWallet(null);
+        }
+        return function () { cancelled = true; };
+      }, [user]);
+
+      const showToast = (msg) => { setToast(msg); setTimeout(function () { setToast(null); }, 2600); };
+      const applyWallet = (next) => {
+        walletRef.current = next;
+        setWallet(next);
+        if (user && sb) sb.from("wallets").update({ coins: next.coins, plan: next.plan, swipes_used: next.swipes_used, swipes_reset: next.swipes_reset, plan_since: next.plan_since || null, updated_at: new Date().toISOString() }).eq("user_id", user.id).then(function () {});
+      };
+      const openShop = (reason) => setShop({ reason: reason || null });
+      const trySpend = (n) => {
+        const w = walletRef.current;
+        if (!w || w.coins < n) return false;
+        applyWallet(Object.assign({}, w, { coins: w.coins - n }));
+        return true;
+      };
+      const spend = (n) => { if (trySpend(n)) return true; openShop("coins"); return false; };
+      const subscribe = (planKey) => {
+        const inf = PLAN_INFO[planKey]; const w = walletRef.current; if (!w || !inf) return;
+        applyWallet(Object.assign({}, w, { coins: w.coins + inf.grant + (inf.bonus || 0), plan: planKey, plan_since: new Date().toISOString() }));
+        setShop(null); showToast("Purchase Successful! 🎉");
+      };
+      const buyPack = (coins) => {
+        const w = walletRef.current; if (!w) return;
+        applyWallet(Object.assign({}, w, { coins: w.coins + coins }));
+        showToast("Purchase Successful! 🎉");
+      };
+      const registerSwipe = () => {
+        const w = walletRef.current;
+        if (!w || (w.plan && w.plan !== "free")) return true;
+        const reset = new Date(w.swipes_reset).getTime();
+        if (Date.now() - reset > SWIPE_WINDOW_MS) { applyWallet(Object.assign({}, w, { swipes_used: 1, swipes_reset: new Date().toISOString() })); return true; }
+        if (w.swipes_used >= FREE_SWIPES) return false;
+        applyWallet(Object.assign({}, w, { swipes_used: w.swipes_used + 1 }));
+        return true;
+      };
+      const econ = {
+        coins: wallet ? wallet.coins : 0,
+        plan: wallet ? wallet.plan : "free",
+        isPaid: !!(wallet && wallet.plan && wallet.plan !== "free"),
+        loggedIn: !!user,
+        spend: spend, trySpend: trySpend, openShop: openShop,
+      };
+
       const saveMe = (next) => {
         setMe(next);
         if (user && sb) {
@@ -1806,6 +2045,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       };
 
       const addLike = (profile) => {
+        if (user && !registerSwipe()) { openShop("swipes"); return; }
         setLiked((prev) => prev.some((p) => p.id === profile.id) ? prev : [...prev, profile]);
         setMatchProfile(profile);
         if (user && sb) {
@@ -1840,6 +2080,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const homeActive = tab === "home" && !matchProfile && !detailProfile;
 
       return (
+        <EconomyContext.Provider value={econ}>
         <div className="fixed inset-0 z-10 flex justify-center lg:items-center lg:gap-12 xl:gap-16 lg:p-8">
           <div aria-hidden className="pointer-events-none absolute inset-0 hidden overflow-hidden lg:block">
             <div className="absolute -left-32 top-1/4 h-96 w-96 rounded-full bg-[#FF007F]/20 blur-[120px]" />
@@ -1850,9 +2091,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
           <div className="relative z-10 flex w-full max-w-[440px] flex-col overflow-hidden lg:h-[min(860px,90vh)] lg:rounded-[44px] lg:bg-black lg:shadow-[0_30px_90px_rgba(0,0,0,.65)] lg:ring-1 lg:ring-white/10">
           {!hideChrome && (
-            <header className="flex shrink-0 items-center justify-center gap-2 pt-5 pb-2.5">
+            <header className="relative flex shrink-0 items-center justify-center gap-2 pt-5 pb-2.5">
               <PulseLogo />
               <span className="font-display text-lg font-bold tracking-[0.12em] text-white" style={{ textShadow: "0 0 14px rgba(255,0,127,.6)" }}>Your AI Babe</span>
+              {user && wallet ? <div className="absolute right-4 top-1/2 -translate-y-1/2"><CoinPill coins={wallet.coins} onClick={() => openShop()} /></div> : null}
             </header>
           )}
 
@@ -1879,8 +2121,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           )}
 
           {authOpen && <AuthModal onClose={() => setAuthOpen(false)} />}
+          {shop && <ShopModal reason={shop.reason} plan={wallet ? wallet.plan : "free"} onClose={() => setShop(null)} onSubscribe={subscribe} onBuyPack={buyPack} />}
+          {toast && <Toast text={toast} />}
           </div>
         </div>
+        </EconomyContext.Provider>
       );
     }
 
