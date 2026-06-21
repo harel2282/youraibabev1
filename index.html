@@ -207,10 +207,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     // Opening lines + who sends them. We enforce a ~1/3 ratio (not pure chance):
     // shuffle the profiles and mark exactly round(n/3) of them as "she texts first".
     const OPENERS = ["Hey you 😄 glad you swiped right", "Omg finally — I was hoping you'd like me back", "Hi! What are you up to today?", "You've got great taste 😉", "So... what made you swipe right?"];
-    function pickSenders() {
-      const ids = PROFILES.map((p) => p.id);
+    function pickSenders(list) {
+      const arr = Array.isArray(list) ? list : [];
+      const ids = arr.map((p) => p.id);
       for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = ids[i]; ids[i] = ids[j]; ids[j] = t; }
-      return new Set(ids.slice(0, Math.round(PROFILES.length / 3)));
+      return new Set(ids.slice(0, Math.round(arr.length / 3)));
     }
     const openerFor = (id) => OPENERS[(id - 1) % OPENERS.length];
 
@@ -1931,7 +1932,6 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [matchProfile, setMatchProfile] = useState(null);
       const [chatOpenId, setChatOpenId] = useState(null);
       const [detailProfile, setDetailProfile] = useState(null);
-      const [senderIds] = useState(() => pickSenders());
       const [me, setMe] = useState(GUEST_ME);
       const [settings, setSettings] = useState({ showMe: "Women", distance: 25, ageRange: [22, 35], global: false, showDistance: true, showAge: true, incognito: false });
       const [notifs, setNotifs] = useState({ push: true, matches: true, messages: true, likes: true, superLikes: false, promos: false, email: false });
@@ -2045,6 +2045,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       }, []);
 
       const allProfiles = React.useMemo(function () { return dbGirls.concat(PROFILES); }, [dbGirls]);
+
+      // Which girls text first after a match: ~1/3 of them, chosen at random, recomputed once the DB girls load.
+      const senderIds = React.useMemo(function () { return pickSenders(allProfiles); }, [allProfiles]);
 
       const showToast = (msg) => { setToast(msg); setTimeout(function () { setToast(null); }, 2600); };
       const applyWallet = (next) => {
