@@ -182,6 +182,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         prompts: Array.isArray(row.prompts) ? row.prompts : [],
         videoFile: row.video_file || null,
         imageFile: row.image_file || null,
+        videoY: (row.video_y == null ? 50 : row.video_y),
         fromDb: true,
       };
     }
@@ -199,6 +200,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     const stackTransform = (depth) => `translateY(${depth * 16}px) scale(${1 - depth * 0.05})`;
     const mediaOf = (id) => (window.MEDIA && window.MEDIA[id]) || "";
     const posterOf = (id) => (window.POSTERS && window.POSTERS[id]) || "";
+    // Vertical framing for the looping feed videos: maps girls.video_y (0 = top, 50 = center, 100 = bottom)
+    // to CSS object-position so the top of the clip (faces) isn't cropped. video_y can be 0, so never use || here.
+    const videoPos = (p) => "50% " + (p && p.videoY != null ? p.videoY : 50) + "%";
 
     // Opening lines + who sends them. We enforce a ~1/3 ratio (not pure chance):
     // shuffle the profiles and mark exactly round(n/3) of them as "she texts first".
@@ -304,7 +308,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       }, [src]);
       return (
         <video ref={vref} src={src} poster={poster} autoPlay loop muted playsInline preload="auto"
-          draggable="false" style={{ backgroundColor: "#18181b" }}
+          draggable="false" style={{ backgroundColor: "#18181b", objectPosition: videoPos(profile) }}
           className="absolute inset-0 h-full w-full object-cover" />
       );
     }
@@ -481,7 +485,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         <div className="anim-up absolute inset-0 z-40 flex flex-col bg-black">
           <div className="no-scrollbar flex-1 overflow-y-auto">
             <div className="relative">
-              <video src={mediaOf(profile.id)} poster={posterOf(profile.id)} autoPlay loop muted playsInline className="h-[58vh] w-full object-cover lg:h-[440px]" style={{ backgroundColor: "#18181b" }} />
+              <video src={mediaOf(profile.id)} poster={posterOf(profile.id)} autoPlay loop muted playsInline className="h-[58vh] w-full object-cover lg:h-[440px]" style={{ backgroundColor: "#18181b", objectPosition: videoPos(profile) }} />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/25" />
               <button onClick={onClose} aria-label="Close" className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform active:scale-90"><BackIcon /></button>
               <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />Online</div>
@@ -557,7 +561,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
           <div className="relative my-10 flex items-center">
             <div className="anim-slideL h-32 w-32 overflow-hidden rounded-full" style={{ animationDelay: ".12s", boxShadow: "0 0 0 3px #FF007F, 0 0 32px rgba(255,0,127,.6)" }}>
-              <video src={mediaOf(profile.id)} poster={posterOf(profile.id)} autoPlay loop muted playsInline className="h-full w-full object-cover" />
+              <video src={mediaOf(profile.id)} poster={posterOf(profile.id)} autoPlay loop muted playsInline className="h-full w-full object-cover" style={{ objectPosition: videoPos(profile) }} />
             </div>
             <div className="anim-slideR -ml-5 flex h-32 w-32 items-center justify-center rounded-full" style={{ animationDelay: ".12s", background: "linear-gradient(135deg,#00E5FF,#FF007F)", boxShadow: "0 0 0 3px #00E5FF, 0 0 32px rgba(0,229,255,.6)" }}>
               <span className="font-display text-5xl font-bold text-white">A</span>
