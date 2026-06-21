@@ -182,6 +182,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         prompts: Array.isArray(row.prompts) ? row.prompts : [],
         videoFile: row.video_file || null,
         imageFile: row.image_file || null,
+        videoY: (row.video_y == null ? 50 : row.video_y),
         fromDb: true,
       };
     }
@@ -304,8 +305,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       }, [src]);
       return (
         <video ref={vref} src={src} poster={poster} autoPlay loop muted playsInline preload="auto"
-          draggable="false" style={{ backgroundColor: "#18181b" }}
-          className="absolute inset-0 h-full w-full object-cover" />
+          draggable="false" style={{ backgroundColor: "#18181b", objectPosition: "50% " + (profile.videoY == null ? 50 : profile.videoY) + "%" }}
       );
     }
 
