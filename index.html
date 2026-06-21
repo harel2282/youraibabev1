@@ -215,6 +215,74 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
     const openerFor = (id) => OPENERS[(id - 1) % OPENERS.length];
 
+    // ── "She texts first" persistence ──
+    // The ~1/3 of girls who message first is rolled once at random, then saved in this browser so a
+    // refresh never re-rolls it. Keyed per user when logged in, and "guest" before login (so it works
+    // even before sign-in). As the catalog grows/shrinks, the saved set is topped up / trimmed so the
+    // 1/3 ratio keeps holding, while existing picks stay put.
+    const SENDERS_KEY = "yab_senders";
+    function sendersKey(userId) { return SENDERS_KEY + "__" + (userId ? userId : "guest"); }
+    function readSenders(userId) {
+      try {
+        var r = localStorage.getItem(sendersKey(userId));
+        if (!r) return null;
+        var arr = JSON.parse(r);
+        if (!Array.isArray(arr)) return null;
+        var out = [];
+        for (var i = 0; i < arr.length; i++) { var n = parseInt(arr[i], 10); if (!isNaN(n)) out.push(n); }
+        return out;
+      } catch (e) { return null; }
+    }
+    function writeSenders(userId, ids) { try { localStorage.setItem(sendersKey(userId), JSON.stringify(ids)); } catch (e) {} }
+    function resolveSenders(list, userId) {
+      var arr = Array.isArray(list) ? list : [];
+      var allIds = arr.map(function (p) { return p.id; });
+      if (allIds.length === 0) return new Set();
+      var allSet = new Set(allIds);
+      var target = Math.round(allIds.length / 3);
+
+      var saved = readSenders(userId);
+      var changed = false;
+
+      // First time for this identity. If a logged-in user already has a guest selection on this
+      // browser, inherit it so the set doesn't visibly jump right after logging in.
+      if (saved == null) {
+        if (userId) { var g = readSenders(null); if (g && g.length) saved = g; }
+        if (saved == null) saved = Array.from(pickSenders(arr));
+        changed = true;
+      }
+
+      // Drop any saved ids that no longer exist in the catalog.
+      var keep = saved.filter(function (id) { return allSet.has(id); });
+      if (keep.length !== saved.length) changed = true;
+
+      // Keep the ~1/3 ratio as the catalog changes (existing picks are preserved).
+      if (keep.length < target) {
+        var keepSet = new Set(keep);
+        var pool = allIds.filter(function (id) { return !keepSet.has(id); });
+        for (var i = pool.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+        keep = keep.concat(pool.slice(0, target - keep.length));
+        changed = true;
+      } else if (keep.length > target) {
+        keep = keep.slice(0, target);
+        changed = true;
+      }
+
+      if (changed) writeSenders(userId, keep);
+      return new Set(keep);
+    }
+
+    // ── Unread tracking for chat rows ──
+    // Remembers, per conversation, the last time the user opened it (saved in this browser, keyed per
+    // user / guest like the senders). A row counts as unread when the girl's latest message is newer than
+    // that — which includes her opener for a brand-new match the user hasn't opened yet.
+    const CHATREADS_KEY = "yab_chatreads";
+    function chatreadsKey(userId) { return CHATREADS_KEY + "__" + (userId ? userId : "guest"); }
+    function readChatReads(userId) {
+      try { var r = localStorage.getItem(chatreadsKey(userId)); if (!r) return {}; var o = JSON.parse(r); return (o && typeof o === "object") ? o : {}; } catch (e) { return {}; }
+    }
+    function writeChatReads(userId, obj) { try { localStorage.setItem(chatreadsKey(userId), JSON.stringify(obj)); } catch (e) {} }
+
     /* ---- Imperative styling shared by the drag + fly-off logic ---- */
     function paintDrag(el, dx) {
       const rot = clamp((dx / 200) * 20, -20, 20);
@@ -1215,7 +1283,26 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
     function ChatsScreen({ matches, goHome, openId, onOpen, onBack, user, requireAuth }) {
       const [lastMsgs, setLastMsgs] = useState({});
+      const [reads, setReads] = useState(function () { return readChatReads(user && user.id ? user.id : null); });
+      const prevOpenRef = useRef(null);
       const open = matches.find((m) => m.id === openId);
+      const idKey = user && user.id ? user.id : null;
+      const markRead = function (id) {
+        setReads(function (prev) { var next = Object.assign({}, prev); next[id] = Date.now(); writeChatReads(idKey, next); return next; });
+      };
+      const openChat = function (id) { markRead(id); onOpen(id); };
+      // A row is unread when the girl's latest message hasn't been opened yet. For a brand-new match
+      // with no saved messages, that means her pending opener (only if she's a "texts first" girl).
+      const isUnread = function (m) {
+        var last = lastMsgs[m.id];
+        var seenAt = reads[m.id] || 0;
+        if (last) {
+          if (last.sender !== "them") return false;
+          var t = last.created_at ? new Date(last.created_at).getTime() : 0;
+          return t > seenAt;
+        }
+        return !!m.sends && seenAt === 0;
+      };
 
       // When viewing the list, load the latest message per conversation from the DB.
       useEffect(() => {
@@ -1230,6 +1317,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         }
         return function () { cancelled = true; };
       }, [user, openId]);
+
+      // Reload the saved read-map when the signed-in identity changes (inherit guest reads on first login).
+      useEffect(function () {
+        var loaded = readChatReads(idKey);
+        if (idKey && Object.keys(loaded).length === 0) {
+          var g = readChatReads(null);
+          if (Object.keys(g).length) { loaded = g; writeChatReads(idKey, g); }
+        }
+        setReads(loaded);
+      }, [idKey]);
+      // Mark a conversation read when the user leaves it (captures everything seen during the visit).
+      useEffect(function () {
+        if (prevOpenRef.current != null && openId == null) markRead(prevOpenRef.current);
+        prevOpenRef.current = openId;
+      }, [openId]);
 
       if (open) return <Conversation profile={open} onBack={onBack} user={user} requireAuth={requireAuth} />;
       if (!matches.length) {
@@ -1274,7 +1376,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-[#FF007F]/80">New matches</div>
           <div className="no-scrollbar mb-3 flex gap-3 overflow-x-auto px-4 pb-1">
             {matches.map((m) => (
-              <button key={m.id} onClick={() => onOpen(m.id)} className="flex w-16 shrink-0 flex-col items-center gap-1">
+              <button key={m.id} onClick={() => openChat(m.id)} className="flex w-16 shrink-0 flex-col items-center gap-1">
                 <div className="h-16 w-16 overflow-hidden rounded-full" style={{ boxShadow: "0 0 0 2px #FF007F, 0 0 14px rgba(255,0,127,.5)" }}>
                   <img src={posterOf(m.id)} alt={m.name} className="h-full w-full object-cover" />
                 </div>
@@ -1285,8 +1387,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="border-t border-white/10">
             {ordered.map((m) => {
               const last = lastMsgs[m.id];
+              const unread = isUnread(m);
               return (
-              <button key={m.id} onClick={() => onOpen(m.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5">
+              <button key={m.id} onClick={() => openChat(m.id)} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/5">
                 <img src={posterOf(m.id)} alt={m.name} className="h-14 w-14 shrink-0 rounded-full object-cover" />
                 <div className="min-w-0 flex-1 border-b border-white/5 pb-3">
                   <div className="flex items-center justify-between">
@@ -1297,7 +1400,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                         ? <span className="text-[11px] text-white/40">{m.time}</span>
                         : <span className="rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FF007F]">New</span>)}
                   </div>
-                  <p className={"truncate text-sm " + ((last || m.sends) ? "text-white/55" : "text-[#FF007F]/80")}>{previewText(m)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className={"min-w-0 flex-1 truncate text-sm " + (unread ? "font-semibold text-white" : ((last || m.sends) ? "text-white/55" : "text-[#FF007F]/80"))}>{previewText(m)}</p>
+                    {unread ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-[#FF007F]" style={{ boxShadow: "0 0 8px rgba(255,0,127,.85)" }} /> : null}
+                  </div>
                 </div>
               </button>
               );
@@ -2046,8 +2152,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
       const allProfiles = React.useMemo(function () { return dbGirls.concat(PROFILES); }, [dbGirls]);
 
-      // Which girls text first after a match: ~1/3 of them, chosen at random, recomputed once the DB girls load.
-      const senderIds = React.useMemo(function () { return pickSenders(allProfiles); }, [allProfiles]);
+      // Which girls text first after a match: ~1/3 of them, chosen at random, then SAVED in the browser
+      // (keyed per user, or "guest" before login) so a refresh keeps the same set instead of re-rolling.
+      const senderIds = React.useMemo(function () {
+        return resolveSenders(allProfiles, user && user.id ? user.id : null);
+      }, [allProfiles, user]);
 
       const showToast = (msg) => { setToast(msg); setTimeout(function () { setToast(null); }, 2600); };
       const applyWallet = (next) => {
