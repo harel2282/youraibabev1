@@ -123,6 +123,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     /* --------------------------- Supabase --------------------------- */
     const SUPABASE_URL = "https://nmkonmvcqcejhrqjmcqv.supabase.co";
     const VOICE_AGENT_ID = "agent_0301kvey7t08exzt22xdaf5qjnpn";
+    const IL_VOICE_AGENT_ID = "agent_5901kvrp0nbneska2a18dzaa6vw3"; // separate Hebrew-voice agent, used for Israeli calls
 
     // ---------- Economy (BABE Coins) ----------
     const EconomyContext = React.createContext(null);
@@ -1186,6 +1187,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           if (!Conversation) { setStatus("error"); return; }
           try {
             const heCall = (profile.lang === "he");
+            const voiceAgentId = (heCall && IL_VOICE_AGENT_ID) ? IL_VOICE_AGENT_ID : VOICE_AGENT_ID;
             const ovr = {
               agent: {
                 prompt: { prompt: voicePersona(profile) },
@@ -1195,7 +1197,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             if (heCall) ovr.agent.language = "he";
             if (heCall && IL_VOICE_ID) ovr.tts = { voiceId: IL_VOICE_ID };
             const c = await Conversation.startSession({
-              agentId: VOICE_AGENT_ID,
+              agentId: voiceAgentId,
               connectionType: "websocket",
               overrides: ovr,
               onConnect: function () { if (!stopped) { connectedRef.current = true; setStatus("active"); if (econ) econ.trySpend(PRICE_VOICE_MIN); } },
