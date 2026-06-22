@@ -26,7 +26,7 @@ function buildPrompt(scene) {
     "Keep the exact same woman from the reference image — identical face, hair, skin tone and body. Do not change her identity. " +
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
+    "Sharp focus, clean realistic detail, natural realistic skin texture."
   );
 }
 
