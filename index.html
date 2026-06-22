@@ -155,7 +155,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     function readGuestLikes() { try { var r = localStorage.getItem(GUEST_LIKES_KEY); return r ? JSON.parse(r) : []; } catch (e) { return []; } }
     function writeGuestLikes(ids) { try { localStorage.setItem(GUEST_LIKES_KEY, JSON.stringify(ids)); } catch (e) {} }
     function idToProfile(id) { return PROFILE_INDEX[id]; }
-    const GUEST_ME = { name: "Guest", age: null, city: "", job: "", gender: "Woman", bio: "", interests: [] };
+    const GUEST_ME = { name: "Guest", age: null, city: "", job: "", gender: "Man", bio: "", interests: [] };
     function fmtTime(iso) {
       if (!iso) return "";
       const d = new Date(iso); const now = new Date();
@@ -188,6 +188,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     // ⬇️ Israeli-edition logo: upload your logo image somewhere public, then paste its
     // URL here (e.g. STORAGE_BASE + "branding/logo-il.png"). Leave "" to keep the default.
     const IL_LOGO_URL = "";
+    const IL_VOICE_ID = ""; // optional: paste a Hebrew ElevenLabs voice ID for Israeli calls (leave "" to use the agent default voice)
+    let USER_GENDER = "male"; // "male" | "female" — how the AI addresses the user in gendered languages (Hebrew). Default masculine.
 
     // ── i18n: Hebrew translations for the Israeli edition (UI strings only) ──
     let UI_LANG = (function () { try { return localStorage.getItem("pulse_edition") === "il" ? "he" : "en"; } catch (e) { return "en"; } })();
@@ -239,6 +241,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
   "Show me": "הצג לי",
   "Women": "נשים",
   "Men": "גברים",
+  "Woman": "אישה",
+  "Man": "גבר",
+  "Beyond": "אחר",
   "Everyone": "כולם",
   "Age range": "טווח גילאים",
   "Region": "אזור",
@@ -399,13 +404,14 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     // Opening lines + who sends them. We enforce a ~1/3 ratio (not pure chance):
     // shuffle the profiles and mark exactly round(n/3) of them as "she texts first".
     const OPENERS = ["Hey you 😄 glad you swiped right", "Omg finally — I was hoping you'd like me back", "Hi! What are you up to today?", "You've got great taste 😉", "So... what made you swipe right?"];
+    const OPENERS_HE = ["היי 😄 שמחה שעשית סוויפ", "וואו סוף סוף — קיוויתי שתעשה לי לייק בחזרה", "היי! מה אתה עושה היום?", "יש לך טעם טוב 😉", "אז... מה גרם לך לעשות סוויפ ימינה?"];
     function pickSenders(list) {
       const arr = Array.isArray(list) ? list : [];
       const ids = arr.map((p) => p.id);
       for (let i = ids.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = ids[i]; ids[i] = ids[j]; ids[j] = t; }
       return new Set(ids.slice(0, Math.round(arr.length / 3)));
     }
-    const openerFor = (id) => OPENERS[(id - 1) % OPENERS.length];
+    const openerFor = (id) => { const p = PROFILE_INDEX[id]; const arr = (p && p.lang === "he") ? OPENERS_HE : OPENERS; return arr[(id - 1) % arr.length]; };
 
     // ── "She texts first" persistence ──
     // The ~1/3 of girls who message first is rolled once at random, then saved in this browser so a
@@ -1063,8 +1069,23 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       "There you are. I was wondering when you'd call.",
       "Hey... I almost didn't think you'd actually call.",
     ];
-    function voiceOpener(name) {
-      return VOICE_OPENERS[Math.floor(Math.random() * VOICE_OPENERS.length)];
+    var VOICE_OPENERS_HE = [
+      "היי... קיוויתי שתתקשר.",
+      "הייי. לקח לך מספיק זמן להתקשר אליי.",
+      "אמממ היי... חשבתי עליך.",
+      "היי... אני כל כך שמחה לשמוע את הקול שלך.",
+      "אז... הופעת. התגעגעת?",
+      "היי זר. מה לקח לך כל כך הרבה זמן?",
+      "אוו היי... תזמון מושלם, התחלתי להשתעמם.",
+      "היי מותק. רגע לפני שעמדתי לכתוב לך.",
+      "הייי. אז... מה אתה עושה?",
+      "אמממ, אני מתה על זה שהתקשרת במקום לכתוב.",
+      "הנה אתה. תהיתי מתי תתקשר.",
+      "היי... כמעט לא האמנתי שבאמת תתקשר.",
+    ];
+    function voiceOpener(name, lang) {
+      var arr = (lang === "he") ? VOICE_OPENERS_HE : VOICE_OPENERS;
+      return arr[Math.floor(Math.random() * arr.length)];
     }
 
     // European/Israeli-style ringback (425 Hz, 1s on / 4s off) generated with Web Audio.
@@ -1106,6 +1127,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
     function voicePersona(p) {
       const tags = (p.tags && p.tags.length) ? p.tags.join(", ") : "";
+      const he = (p.lang === "he");
       return (
         "You are " + p.name + ", a " + p.age + "-year-old woman from " + p.city + (p.job ? " who works as a " + p.job : "") + ". " +
         (p.bio ? p.bio + " " : "") +
@@ -1113,7 +1135,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         "You're on a voice call with someone you matched with on a dating app. " +
         "Be warm, playful, flirty and charming — like a real woman enjoying a fun call with someone she clicked with. Tease lightly and build a nice spark, but keep it tasteful and never sexually explicit. Keep your replies short and conversational, the way people actually talk out loud. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". If the call turns toward explicit sexual content, deflect playfully and keep it classy — stay flirty and warm, but don't go there."
+        "If anyone asks your name, your name is " + p.name + ". If the call turns toward explicit sexual content, deflect playfully and keep it classy — stay flirty and warm, but don't go there." +
+        (he ? (" IMPORTANT: You are Israeli and you speak ONLY in Hebrew (עברית) on this call — natural, fluent, casual modern Israeli Hebrew, the way a young Israeli woman really talks out loud. Never switch to English, even if the other person speaks English." + ((USER_GENDER === "female") ? " The person on the call is a WOMAN — always address her using Hebrew FEMININE second-person forms (את, שלך, feminine verbs and adjectives)." : " The person on the call is a MAN — always address him using Hebrew MASCULINE second-person forms (אתה, שלך, masculine verbs and adjectives).")) : "")
       );
     }
 
@@ -1149,10 +1172,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           catch (e) { if (!stopped) setStatus("error"); return; }
 
           // If there was recent chat, ask the backend for an opener that follows up on it.
-          let firstMessage = voiceOpener(profile.name);
+          let firstMessage = voiceOpener(profile.name, profile.lang);
           if (openerHistory && openerHistory.length) {
             try {
-              const ro = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: { name: profile.name }, messages: openerHistory, mode: "voice_opener" }) });
+              const ro = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: { name: profile.name, lang: profile.lang, userGender: USER_GENDER }, messages: openerHistory, mode: "voice_opener" }) });
               if (ro.ok) { const dop = await ro.json(); if (dop && dop.opener) firstMessage = dop.opener; }
             } catch (e) {}
           }
@@ -1162,15 +1185,19 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           if (stopped) return;
           if (!Conversation) { setStatus("error"); return; }
           try {
+            const heCall = (profile.lang === "he");
+            const ovr = {
+              agent: {
+                prompt: { prompt: voicePersona(profile) },
+                firstMessage: firstMessage,
+              },
+            };
+            if (heCall) ovr.agent.language = "he";
+            if (heCall && IL_VOICE_ID) ovr.tts = { voiceId: IL_VOICE_ID };
             const c = await Conversation.startSession({
               agentId: VOICE_AGENT_ID,
               connectionType: "websocket",
-              overrides: {
-                agent: {
-                  prompt: { prompt: voicePersona(profile) },
-                  firstMessage: firstMessage,
-                },
-              },
+              overrides: ovr,
               onConnect: function () { if (!stopped) { connectedRef.current = true; setStatus("active"); if (econ) econ.trySpend(PRICE_VOICE_MIN); } },
               onDisconnect: function () { if (!stopped) finish(); },
               onModeChange: function (m) { if (stopped) return; const mo = m && m.mode ? m.mode : m; setMode(mo === "speaking" ? "speaking" : "listening"); },
@@ -1293,7 +1320,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       useEffect(() => { if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }, [msgs, typing]);
 
       // Fallback lines, used only if the AI backend isn't reachable.
-      const REPLIES = ["Haha I like the way you think 😄", "Tell me more about you", "You're cute, you know that?", "What are you up to later?", "I'm into music and late-night drives. You?", "Good answer 😉"];
+      const REPLIES = (profile.lang === "he")
+        ? ["חחח אהבתי איך שאתה חושב 😄", "ספר לי עוד עליך", "אתה חמוד, יודע את זה?", "מה אתה עושה אחר כך?", "אני בקטע של מוזיקה ונסיעות לילה. ואתה?", "תשובה טובה 😉"]
+        : ["Haha I like the way you think 😄", "Tell me more about you", "You're cute, you know that?", "What are you up to later?", "I'm into music and late-night drives. You?", "Good answer 😉"];
 
       const saveMsg = (sender, content) => {
         lastMsgAtRef.current = Date.now();
@@ -1314,7 +1343,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
       const aiReply = (afterList) => {
         setTyping(true);
-        const persona = { name: profile.name, age: profile.age, job: profile.job, city: profile.city, bio: profile.bio, tags: profile.tags, lookingFor: profile.lookingFor };
+        const persona = { name: profile.name, age: profile.age, job: profile.job, city: profile.city, bio: profile.bio, tags: profile.tags, lookingFor: profile.lookingFor, lang: profile.lang, userGender: USER_GENDER };
         fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -1324,9 +1353,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           .then((d) => {
             setTyping(false);
             if (d && d.image) {
-              const cap = d.caption || "Here you go 😊";
+              const cap = d.caption || (profile.lang === "he" ? "הנה 😊" : "Here you go 😊");
               if (econ && econ.loggedIn && econ.coins < PRICE_IMAGE) {
-                const poor = "I'd love to send you a pic 😋 but you're out of coins — top up and ask me again?";
+                const poor = (profile.lang === "he") ? "בא לי לשלוח לך תמונה 😋 אבל נגמרו לך המטבעות — תטעין ותבקש שוב?" : "I'd love to send you a pic 😋 but you're out of coins — top up and ask me again?";
                 setMsgs((prev) => [...prev, { from: "them", text: poor }]);
                 saveMsg("them", poor);
                 econ.openShop("coins");
@@ -1361,7 +1390,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           const copy = prev.slice(); copy[idx] = msg; return copy;
         });
       };
-      const failPhoto = () => { replaceGenerating({ from: "them", text: "Ugh, my camera's being weird right now 😅 ask me again in a sec?" }); };
+      const failPhoto = () => { replaceGenerating({ from: "them", text: (profile.lang === "he") ? "אוף, המצלמה שלי מתפנפנת עכשיו 😅 תבקש ממני עוד רגע?" : "Ugh, my camera's being weird right now 😅 ask me again in a sec?" }); };
       const pollPhoto = (id, attempt) => {
         if (attempt > 40) { failPhoto(); return; }
         fetch("/api/image?id=" + encodeURIComponent(id))
@@ -2292,6 +2321,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           if (he) { document.body.classList.add("he-ui"); } else { document.body.classList.remove("he-ui"); }
         } catch (e) {}
       }, [region]);
+      useEffect(function () { USER_GENDER = (me && me.gender === "Woman") ? "female" : "male"; }, [me]);
       const [girlsLoaded, setGirlsLoaded] = useState(false);
       const walletRef = useRef(null);
       const user = session ? session.user : null;
@@ -2339,7 +2369,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               age: (row && row.age) ? row.age : null,
               city: (row && row.city) ? row.city : "",
               job: (row && row.job) ? row.job : "",
-              gender: (row && row.gender) ? row.gender : "Woman",
+              gender: (row && row.gender) ? row.gender : "Man",
               bio: (row && row.bio) ? row.bio : "",
               interests: (row && Array.isArray(row.interests)) ? row.interests : [],
             });
@@ -2389,6 +2419,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             mapped.forEach(function (p) {
               p.refBucket = ed.refBucket;
               p.vidBucket = ed.vidBucket;
+              p.lang = (ed.table === "girls_il") ? "he" : "en";
               PROFILE_INDEX[p.id] = p;
               if (p.videoFile) window.MEDIA[p.id] = STORAGE_BASE + ed.vidBucket + "/" + p.videoFile;
               if (p.imageFile) window.POSTERS[p.id] = STORAGE_BASE + ed.refBucket + "/" + p.imageFile;
