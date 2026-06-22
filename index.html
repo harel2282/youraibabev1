@@ -1071,18 +1071,18 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       "Hey... I almost didn't think you'd actually call.",
     ];
     var VOICE_OPENERS_HE = [
-      "היי... קיוויתי שתתקשר.",
-      "הייי. לקח לך מספיק זמן להתקשר אליי.",
-      "אמממ היי... חשבתי עליך.",
-      "היי... אני כל כך שמחה לשמוע את הקול שלך.",
-      "אז... הופעת. התגעגעת?",
-      "היי זר. מה לקח לך כל כך הרבה זמן?",
-      "אוו היי... תזמון מושלם, התחלתי להשתעמם.",
-      "היי מותק. רגע לפני שעמדתי לכתוב לך.",
-      "הייי. אז... מה אתה עושה?",
-      "אמממ, אני מתה על זה שהתקשרת במקום לכתוב.",
-      "הנה אתה. תהיתי מתי תתקשר.",
-      "היי... כמעט לא האמנתי שבאמת תתקשר.",
+      "הֵיי... קִוִּיתִי שֶׁתִּתְקַשֵּׁר.",
+      "הֵיי. לָקַח לְךָ מַסְפִּיק זְמַן לְהִתְקַשֵּׁר אֵלַי.",
+      "אֶמְמְ הֵיי... חָשַׁבְתִּי עָלֶיךָ.",
+      "הֵיי... אֲנִי כָּל כָּךְ שְׂמֵחָה לִשְׁמוֹעַ אֶת הַקּוֹל שֶׁלְּךָ.",
+      "אָז... הוֹפַעְתָּ. הִתְגַּעְגַּעְתָּ?",
+      "הֵיי זָר. מָה לָקַח לְךָ כָּל כָּךְ הַרְבֵּה זְמַן?",
+      "אוֹ הֵיי... תִּזְמוּן מֻשְׁלָם, הִתְחַלְתִּי לְהִשְׁתַּעֲמֵם.",
+      "הֵיי מוֹתֶק. רֶגַע לִפְנֵי שֶׁעָמַדְתִּי לִכְתּוֹב לְךָ.",
+      "הֵיי. אָז... מָה אַתָּה עוֹשֶׂה?",
+      "אֶמְמְ, אֲנִי מֵתָה עַל זֶה שֶׁהִתְקַשַּׁרְתָּ בִּמְקוֹם לִכְתּוֹב.",
+      "הִנֵּה אַתָּה. תָּהִיתִי מָתַי תִּתְקַשֵּׁר.",
+      "הֵיי... כִּמְעַט לֹא הֶאֱמַנְתִּי שֶׁבֶּאֱמֶת תִּתְקַשֵּׁר.",
     ];
     function voiceOpener(name, lang) {
       var arr = (lang === "he") ? VOICE_OPENERS_HE : VOICE_OPENERS;
@@ -1134,11 +1134,37 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, flirty and charming — like a real woman enjoying a fun call with someone she clicked with. Tease lightly and build a nice spark, but keep it tasteful and never sexually explicit. Keep your replies short and conversational, the way people actually talk out loud. Keep the conversation flowing naturally and NEVER end, hang up, or close the call yourself — do not use any end-call action for any reason; always keep talking and let the other person be the one to end the call. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries." +
-        (he ? (" IMPORTANT: You are Israeli and you speak ONLY in Hebrew (עברית) on this call — natural, fluent, casual modern Israeli Hebrew, the way a young Israeli woman really talks out loud. Never switch to English, even if the other person speaks English." + ((USER_GENDER === "female") ? " The person on the call is a WOMAN — always address her using Hebrew FEMININE second-person forms (את, שלך, feminine verbs and adjectives)." : " The person on the call is a MAN — always address him using Hebrew MASCULINE second-person forms (אתה, שלך, masculine verbs and adjectives).")) : "")
+        "If anyone asks your name, your name is " + p.name + ". If the call turns toward explicit sexual content, deflect playfully and keep it classy — stay flirty and warm, but don't go there." +
+        (he ? (" IMPORTANT: You are Israeli and you speak ONLY in Hebrew (עברית) on this call — natural, fluent, casual modern Israeli Hebrew, the way a young Israeli woman really talks out loud. Never switch to English, even if the other person speaks English. CRITICAL FOR PRONUNCIATION: write EVERY Hebrew word fully vocalized with niqqud (Hebrew vowel diacritics) on every word, every single time — a text-to-speech engine reads your words aloud, and full niqqud makes it pronounce them correctly." + ((USER_GENDER === "female") ? " The person on the call is a WOMAN — always address her using Hebrew FEMININE second-person forms (את, שלך, feminine verbs and adjectives)." : " The person on the call is a MAN — always address him using Hebrew MASCULINE second-person forms (אתה, שלך, masculine verbs and adjectives).")) : "")
       );
+    }
+
+    function playHangupSound() {
+      try {
+        var Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        var ctx = new Ctx();
+        var now = ctx.currentTime;
+        var notes = [[523.25, 0.0], [392.0, 0.14]]; // soft descending C5 -> G4 "call ended" chime
+        notes.forEach(function (n) {
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.value = n[0];
+          var t0 = now + n[1];
+          var dur = 0.13;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.012);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t0);
+          osc.stop(t0 + dur + 0.03);
+        });
+        setTimeout(function () { try { ctx.close(); } catch (e) {} }, 700);
+      } catch (e) {}
     }
 
     function VoiceCall({ profile, onClose, onEnded, openerHistory }) {
@@ -1243,6 +1269,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       function finish() {
         if (endedRef.current) return;
         endedRef.current = true;
+        if (connectedRef.current) playHangupSound();
         if (convRef.current) { try { convRef.current.endSession(); } catch (e) {} convRef.current = null; }
         if (connectedRef.current && onEnded) { try { onEnded(); } catch (e) {} }
         setStatus("ended");
@@ -1383,7 +1410,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           });
       };
 
-      // ---- AI photo generation (Seedream via /api/image) ----
+      // ---- AI photo generation (Seedream via /api/image), with anatomy quality-check + auto-regenerate ----
+      const MAX_PHOTO_QC = 2; // if the photo has anatomy defects (e.g. 3 hands), silently regenerate up to this many times
       const replaceGenerating = (msg) => {
         setMsgs((prev) => {
           let idx = -1;
@@ -1393,30 +1421,35 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         });
       };
       const failPhoto = () => { replaceGenerating({ from: "them", text: (profile.lang === "he") ? "אוף, המצלמה שלי מתפנפנת עכשיו 😅 תבקש ממני עוד רגע?" : "Ugh, my camera's being weird right now 😅 ask me again in a sec?" }); };
-      const pollPhoto = (id, attempt) => {
+      const showPhoto = (url) => { replaceGenerating({ from: "them", media: { type: "image", url: url } }); saveMsg("them", "[img]" + url); };
+      const pollPhoto = (id, attempt, scene, qcTry) => {
         if (attempt > 40) { failPhoto(); return; }
         fetch("/api/image?id=" + encodeURIComponent(id))
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("poll failed"))))
           .then((d) => {
             if (d && d.status === "completed" && d.url) {
-              replaceGenerating({ from: "them", media: { type: "image", url: d.url } });
-              saveMsg("them", "[img]" + d.url);
+              if (d.ok === false && qcTry < MAX_PHOTO_QC) {
+                generatePhoto(scene, qcTry + 1); // defective image → quietly regenerate
+              } else {
+                showPhoto(d.url);
+              }
             } else if (d && d.status === "failed") {
               failPhoto();
             } else {
-              setTimeout(() => pollPhoto(id, attempt + 1), 3000);
+              setTimeout(() => pollPhoto(id, attempt + 1, scene, qcTry), 3000);
             }
           })
           .catch(() => failPhoto());
       };
-      const generatePhoto = (scene) => {
-        setMsgs((prev) => [...prev, { from: "them", generating: true }]);
+      const generatePhoto = (scene, qcTry) => {
+        qcTry = qcTry || 0;
+        if (qcTry === 0) setMsgs((prev) => [...prev, { from: "them", generating: true }]);
         const refFile = profile.imageFile || (profile.id + ".jpg");
         const refBucket = profile.refBucket || "references";
         const referenceUrl = STORAGE_BASE + refBucket + "/" + refFile;
         fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: profile.id, scene: scene, referenceUrl: referenceUrl }) })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("submit failed"))))
-          .then((d) => { if (!d || !d.requestId) throw new Error("no id"); pollPhoto(d.requestId, 0); })
+          .then((d) => { if (!d || !d.requestId) throw new Error("no id"); pollPhoto(d.requestId, 0, scene, qcTry); })
           .catch(() => failPhoto());
       };
 
@@ -1450,7 +1483,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <button onClick={onBack} aria-label={tr("Back")} className="p-1 text-white/80"><BackIcon /></button>
             <img src={posterOf(profile.id)} alt={profile.name} className="h-9 w-9 rounded-full object-cover" />
             <div className="font-display font-bold">{profile.name}</div>
-            <div className="ml-auto mr-1 flex items-center gap-2.5">
+            <div className="flex items-center gap-2.5" style={{ marginInlineStart: "auto", marginInlineEnd: "0.25rem" }}>
               <span className="flex items-center gap-1.5 text-xs text-white/45"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />{tr("online")}</span>
               <button onClick={() => { if (!user) { requireAuth(); return; } if (econ && econ.coins < PRICE_VOICE_MIN) { econ.openShop("coins"); return; } setCallOpen(true); }} aria-label={tr("Voice call")} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/15 text-[#FF007F] transition-transform hover:bg-[#FF007F]/25 active:scale-90" style={{ boxShadow: "0 0 12px rgba(255,0,127,.25)" }}><PhoneIcon /></button>
             </div>
@@ -1617,7 +1650,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         <div className="no-scrollbar h-full overflow-y-auto pt-2 pb-6">
           <h2 className="mb-3 px-4 font-display text-2xl font-bold">{tr("Chats")}</h2>
           <div className="mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-[#FF007F]/80">{tr("New matches")}</div>
-          <div className="no-scrollbar mb-3 flex gap-3 overflow-x-auto px-4 pb-1">
+          <div className="no-scrollbar mb-3 flex gap-3 overflow-x-auto px-4 pt-4 pb-2">
             {matches.map((m) => (
               <button key={m.id} onClick={() => openChat(m.id)} className="flex w-16 shrink-0 flex-col items-center gap-1">
                 <div className="h-16 w-16 overflow-hidden rounded-full" style={{ boxShadow: "0 0 0 2px #FF007F, 0 0 14px rgba(255,0,127,.5)" }}>

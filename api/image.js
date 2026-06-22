@@ -30,6 +30,46 @@ function buildPrompt(scene) {
   );
 }
 
+// ---- Anatomy / quality gate ----
+// Asks a Grok vision model whether the generated photo has obvious AI defects
+// (3 hands, extra fingers, two people, melted face...). Returns true if the image
+// looks OK. FAILS OPEN: if the check is disabled, times out, or errors, returns true
+// so a photo is still sent (never blocks the flow). Reuses XAI_API_KEY.
+// Env: IMAGE_QC=off to disable. GROK_VISION_MODEL to use a faster vision model.
+async function verifyAnatomy(imageUrl) {
+  if (String(process.env.IMAGE_QC || "on").toLowerCase() === "off") return true;
+  const xaiKey = process.env.XAI_API_KEY;
+  if (!xaiKey || !imageUrl) return true;
+  const model = process.env.GROK_VISION_MODEL || process.env.GROK_MODEL || "grok-4.3";
+  const controller = new AbortController();
+  const timer = setTimeout(function () { controller.abort(); }, 8000); // stay under Vercel's 10s function limit
+  try {
+    const r = await fetch("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer " + xaiKey },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: model,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: imageUrl, detail: "low" } },
+            { type: "text", text: "You are a strict QA checker for AI-generated photos of a single person. Reply with ONLY one word. Say 'BAD' if the image has any clear anatomical defect: more than two hands or arms, extra/missing/fused fingers, extra legs, more than one person, duplicated or merged body parts, or a grossly distorted or melted hand or face. Say 'OK' if the person looks anatomically normal. If you are unsure, say 'OK'." }
+          ]
+        }]
+      })
+    });
+    if (!r.ok) return true;
+    const j = await r.json();
+    const txt = ((j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").toString().toUpperCase();
+    return txt.indexOf("BAD") === -1;
+  } catch (e) {
+    return true;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export default async function handler(req, res) {
   const key = process.env.WAVESPEED_API_KEY;
   if (!key) {
@@ -55,6 +95,10 @@ export default async function handler(req, res) {
       if (data && Array.isArray(data.outputs) && data.outputs.length) url = data.outputs[0];
       if (status === "failed") {
         return res.status(200).json({ status: "failed", error: (data && data.error) || "Generation failed" });
+      }
+      if (status === "completed" && url) {
+        const ok = await verifyAnatomy(url);
+        return res.status(200).json({ status: status, url: url, ok: ok });
       }
       return res.status(200).json({ status: status, url: url });
     }
