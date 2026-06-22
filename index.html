@@ -85,6 +85,14 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
   .anim-sheet { animation: sheetUp .3s cubic-bezier(.2,.8,.25,1) both; }
   @media (prefers-reduced-motion: reduce){ .anim-sheet { animation-duration:.01ms; } }
 </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Rubik:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  body.he-ui { font-family: "Heebo", "Inter", system-ui, sans-serif; }
+  body.he-ui .font-display { font-family: "Rubik", "Heebo", sans-serif; }
+  html[dir="rtl"] .no-scrollbar { direction: rtl; }
+</style>
 </head>
 <body>
   <div class="backdrop"></div>
@@ -166,6 +174,190 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     var PROFILE_INDEX = {};
     PROFILES.forEach(function (p) { PROFILE_INDEX[p.id] = p; });
     const STORAGE_BASE = SUPABASE_URL + "/storage/v1/object/public/";
+
+    // ── Editions ──────────────────────────────────────────────────────────────
+    // "global" uses the original girls table + buckets. "il" uses a FULLY separate
+    // Israeli table and storage buckets. The toggle lives in Settings → Region.
+    // To populate the Israeli edition: create table `girls_il` (same schema as `girls`)
+    // and public buckets `references-il` + `girl-videos-il`, then upload girls there.
+    const EDITIONS = {
+      global: { table: "girls",    refBucket: "references",    vidBucket: "girl-videos" },
+      il:     { table: "girls_il", refBucket: "israel-references", vidBucket: "israel-girl-videos" },
+    };
+
+    // ⬇️ Israeli-edition logo: upload your logo image somewhere public, then paste its
+    // URL here (e.g. STORAGE_BASE + "branding/logo-il.png"). Leave "" to keep the default.
+    const IL_LOGO_URL = "";
+
+    // ── i18n: Hebrew translations for the Israeli edition (UI strings only) ──
+    let UI_LANG = (function () { try { return localStorage.getItem("pulse_edition") === "il" ? "he" : "en"; } catch (e) { return "en"; } })();
+    const HE = {
+  "Home": "בית",
+  "Explore": "גלה",
+  "Likes": "לייקים",
+  "Chats": "צ׳אטים",
+  "Profile": "פרופיל",
+  "Back": "חזרה",
+  "Close": "סגירה",
+  "Send": "שליחה",
+  "Voice call": "שיחה קולית",
+  "End call": "סיום שיחה",
+  "Flip camera": "היפוך מצלמה",
+  "Capture": "צילום",
+  "Edit photo": "עריכת תמונה",
+  "Add photo or video": "הוספת תמונה או וידאו",
+  "Rewind last swipe": "ביטול ההחלקה האחרונה",
+  "Like": "לייק",
+  "Nope": "דלג",
+  "Edit profile": "עריכת פרופיל",
+  "Fresh faces near you": "פרצופים חדשים לידך",
+  "Loading profiles…": "טוען פרופילים…",
+  "You're all caught up": "ראית את כולם",
+  "No more people nearby right now. Take another look while you wait.": "אין עוד אנשים בסביבה כרגע. הצץ שוב בינתיים.",
+  "Start over": "להתחיל מחדש",
+  "Tap for more": "הקש לעוד",
+  "Online": "מחובר/ת",
+  "online": "מחובר/ת",
+  "It's a Match!": "יש התאמה!",
+  "Keep swiping": "להמשיך להחליק",
+  "Say hi 👋 — break the ice first.": "תגיד היי 👋 — שבור את הקרח.",
+  "Send a message": "שליחת הודעה",
+  "New": "חדש",
+  "Sending a photo…": "שולחת תמונה…",
+  "Photo": "תמונה",
+  "Photos": "תמונות",
+  "Camera": "מצלמה",
+  "Open gallery instead": "פתח גלריה במקום",
+  "Open gallery": "פתח גלריה",
+  "Photo & Video": "תמונה ווידאו",
+  "REC": "מקליט",
+  "Make sure microphone access is allowed, then try again.": "ודא שהגישה למיקרופון מאופשרת, ואז נסה שוב.",
+  "Settings": "הגדרות",
+  "Account": "חשבון",
+  "Email": "אימייל",
+  "Preferences": "העדפות",
+  "Show me": "הצג לי",
+  "Women": "נשים",
+  "Men": "גברים",
+  "Everyone": "כולם",
+  "Age range": "טווח גילאים",
+  "Region": "אזור",
+  "Edition": "מהדורה",
+  "Global": "גלובלי",
+  "Israel": "ישראל",
+  "Switches the lineup to the Israeli edition.": "מחליף את המבחר למהדורה הישראלית.",
+  "Data & privacy": "נתונים ופרטיות",
+  "Clear chat history": "מחיקת היסטוריית צ׳אט",
+  "Erase all conversations and memory": "מחיקת כל השיחות והזיכרון",
+  "Delete account": "מחיקת חשבון",
+  "Restore purchases": "שחזור רכישות",
+  "Log out": "התנתקות",
+  "Clear chat history?": "למחוק את היסטוריית הצ׳אט?",
+  "Delete your account?": "למחוק את החשבון שלך?",
+  "Cancel": "ביטול",
+  "Clear": "מחיקה",
+  "This permanently deletes all your conversations and memory with every companion. This can't be undone.": "פעולה זו מוחקת לצמיתות את כל השיחות והזיכרון עם כל הדמויות. לא ניתן לבטל.",
+  "This permanently deletes your account, your matches, and all your conversations. This can't be undone.": "פעולה זו מוחקת לצמיתות את החשבון שלך, ההתאמות וכל השיחות. לא ניתן לבטל.",
+  "Notifications": "התראות",
+  "Push notifications": "התראות דחיפה",
+  "Master switch for all alerts": "מתג ראשי לכל ההתראות",
+  "Activity": "פעילות",
+  "New matches": "התאמות חדשות",
+  "Messages": "הודעות",
+  "Super Likes": "סופר לייקים",
+  "Email notifications": "התראות אימייל",
+  "Promotions & tips": "מבצעים וטיפים",
+  "Help & Support": "עזרה ותמיכה",
+  "Help & support": "עזרה ותמיכה",
+  "FAQ": "שאלות נפוצות",
+  "Contact support": "יצירת קשר עם התמיכה",
+  "Privacy & safety": "פרטיות ובטיחות",
+  "Other": "אחר",
+  "Main": "ראשי",
+  "Edit Profile": "עריכת פרופיל",
+  "About me": "עליי",
+  "Essentials": "פרטים בסיסיים",
+  "Interests": "תחומי עניין",
+  "First name": "שם פרטי",
+  "Your age": "הגיל שלך",
+  "Add your age": "הוסף את הגיל שלך",
+  "I am": "אני",
+  "Location": "מיקום",
+  "Work": "עבודה",
+  "Save": "שמירה",
+  "Signed in as": "מחובר/ת כ",
+  "Sign up / Log in": "הרשמה / התחברות",
+  "Sign up or log in": "הרשמה או התחברות",
+  "Save your likes and chats across devices": "שמירת הלייקים והצ׳אטים בכל המכשירים",
+  "Password": "סיסמה",
+  "At least 6 characters": "לפחות 6 תווים",
+  "No likes yet": "עדיין אין לייקים",
+  "Swipe right on someone you like and they'll show up here.": "החלק ימינה על מי שמוצא חן בעיניך והם יופיעו כאן.",
+  "Start swiping": "להתחיל להחליק",
+  "No chats yet": "עדיין אין צ׳אטים",
+  "Like someone and they'll match with you instantly. Then say hi.": "עשה לייק למישהי והיא תתאים אליך מיד. ואז תגיד היי.",
+  "Find matches": "מצא התאמות",
+  "People you liked": "אנשים שאהבת",
+  "Premium": "פרימיום",
+  "Deluxe": "דלוקס",
+  "Monthly": "חודשי",
+  "Yearly": "שנתי",
+  "Save 50%": "חיסכון 50%",
+  "Best Value": "הכי משתלם",
+  "Current plan": "המנוי הנוכחי",
+  "BABE Coin packs": "חבילות BABE Coins",
+  "Get more coins": "קבל עוד מטבעות",
+  "Popular": "פופולרי",
+  "Upgrade": "שדרוג",
+  "Unlock everything Your AI Babe has to offer.": "גלה את כל מה שיש ל-Your AI Babe להציע.",
+  "Unlimited likes, plus your monthly BABE Coins for chats, photos and calls.": "לייקים בלי הגבלה, בתוספת BABE Coins חודשיים לצ׳אטים, תמונות ושיחות.",
+  "Unlimited likes, plus monthly BABE Coins for messages, photos and voice calls.": "לייקים בלי הגבלה, בתוספת BABE Coins חודשיים להודעות, תמונות ושיחות קוליות.",
+  "coins": "מטבעות",
+  "50 BABE Coins free 🎁": "50 BABE Coins חינם 🎁",
+  "Get them instantly when you sign up.": "קבל אותם מיד עם ההרשמה.",
+  "Swipe to match": "החלק כדי להתאים",
+  "Browse freely and like who you vibe with — no account needed.": "דפדף בחופשיות ועשה לייק למי שמתחבר אליך — בלי צורך בחשבון.",
+  "Real AI conversations": "שיחות AI אמיתיות",
+  "Companions who reply for real and remember every word.": "דמויות שעונות באמת וזוכרות כל מילה.",
+  "Private & secure": "פרטי ומאובטח",
+  "Your chats are yours alone — protected and never shared.": "הצ׳אטים שלך שלך בלבד — מוגנים ולעולם לא משותפים.",
+  "Available on web · No download needed": "זמין בדפדפן · ללא צורך בהורדה",
+  "Private & secure · Cancel anytime · Demo mode": "פרטי ומאובטח · ביטול בכל עת · מצב הדגמה",
+  "Go Premium": "שדרג לפרימיום",
+  "Get started": "בואו נתחיל",
+  "Connecting…": "מתחבר…",
+  "Call ended": "השיחה הסתיימה",
+  "Couldn't connect": "החיבור נכשל",
+  "Purchase Successful! 🎉": "הרכישה בוצעה! 🎉",
+  "Subscribe to": "מנוי ל",
+  "You're": "את/ה",
+  "LIKE": "לייק",
+  "NOPE": "דלג",
+  "Create your account": "יצירת חשבון",
+  "Welcome back": "ברוך/ה שובך",
+  "Sign up to start chatting with your matches.": "הירשם כדי להתחיל לשוחח עם ההתאמות שלך.",
+  "Log in to continue your conversations.": "התחבר כדי להמשיך את השיחות שלך.",
+  "Please wait…": "רגע אחד…",
+  "Sign up": "הרשמה",
+  "Log in": "התחברות",
+  "Already have an account? ": "כבר יש לך חשבון? ",
+  "New here? ": "חדש כאן? ",
+  "Enter a valid email and a password of at least 6 characters.": "הזן אימייל תקין וסיסמה באורך 6 תווים לפחות.",
+  "Sign in isn't available right now. Please try again later.": "ההתחברות אינה זמינה כרגע. נסה שוב מאוחר יותר.",
+  "/mo": "/חודש",
+  "Match, chat & connect with AI companions": "הכירו, שוחחו והתחברו עם דמויות AI",
+  "Companions with real personalities who actually get you. Swipe, match, and start a conversation that remembers everything.": "דמויות עם אישיות אמיתית שבאמת מבינות אותך. החליקו, התאימו, והתחילו שיחה שזוכרת הכל.",
+  "How do matches work?": "איך התאמות עובדות?",
+  "When you like someone and they like you back, it's a match. Some matches message you first; for the rest, you break the ice.": "כשאתה עושה לייק למישהי והיא מחזירה לייק — זו התאמה. חלק מההתאמות יכתבו לך ראשונות; אצל השאר, אתה שובר את הקרח.",
+  "What is Your AI Babe Premium?": "מה זה Your AI Babe פרימיום?",
+  "Premium and Deluxe give you unlimited likes plus monthly BABE Coins, which you spend on messages, AI photos and voice calls.": "פרימיום ודלוקס נותנים לך לייקים בלי הגבלה ובנוסף BABE Coins חודשיים, שאותם מוציאים על הודעות, תמונות AI ושיחות קוליות.",
+  "How do I rewind a swipe?": "איך מבטלים החלקה?",
+  "Tap the gold rewind button on the left of the action bar to bring back your last card.": "הקש על כפתור הזהב לביטול בשורת הפעולות כדי להחזיר את הכרטיס האחרון.",
+  "How do I report someone?": "איך מדווחים על מישהו?",
+  "Open their profile, tap the menu, and choose Report. Our team reviews every report.": "פתח את הפרופיל שלהם, הקש על התפריט ובחר 'דיווח'. הצוות שלנו בודק כל דיווח."
+};
+    function tr(s) { if (UI_LANG === "he" && s != null) { var v = HE[s]; if (v != null) return v; } return s; }
+
     function dbRowToProfile(row) {
       return {
         id: row.id,
@@ -321,6 +513,25 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     const LikeIcon = () => <HeartShape width="32" height="32" />;
     const RewindIcon = () => (<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 14L4 9l5-5" /><path d="M4 9h10a6 6 0 0 1 0 12h-4" /></svg>);
     const PulseLogo = () => (<svg className="logo-pulse" viewBox="0 0 44 24" width="30" height="17" fill="none" stroke="var(--pink)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M2 13h7l2.5-8 5 16 3.5-11 2.5 4h4l4-2" /></svg>);
+
+    // Brand lockup in the header. In the Israeli edition, shows your uploaded logo
+    // (IL_LOGO_URL); falls back to the default Pulse lockup if it's empty or fails to load.
+    function BrandMark({ region }) {
+      if (region === "il" && IL_LOGO_URL) {
+        return (
+          <span className="flex items-center gap-2">
+            <img src={IL_LOGO_URL} alt="" className="h-7 w-auto object-contain"
+                 onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          </span>
+        );
+      }
+      return (
+        <span className="flex items-center gap-2">
+          <PulseLogo />
+          <span className="font-display text-lg font-bold tracking-[0.12em] text-white" style={{ textShadow: "0 0 14px rgba(255,0,127,.6)" }}>Your AI Babe</span>
+        </span>
+      );
+    }
     const HomeIcon = () => (<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 11l9-8 9 8" /><path d="M5 10v9a1 1 0 0 0 1 1h3v-6h6v6h3a1 1 0 0 0 1-1v-9" /></svg>);
     const ExploreIcon = () => (<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M15.6 8.4l-2.1 5.1-5.1 2.1 2.1-5.1z" /></svg>);
     const LikesTabIcon = () => (<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20s-7-4.5-9.5-9C1 8 2.5 4.5 6 4.5c2 0 3.2 1.3 4 2.5.8-1.2 2-2.5 4-2.5 3.5 0 5 3.5 3.5 6.5C19 15.5 12 20 12 20z" /></svg>);
@@ -504,9 +715,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent" />
           <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/50 to-transparent" />
           <div data-stamp="like" style={{ opacity: 0, transition: "opacity .15s ease", textShadow: "0 0 18px rgba(255,0,127,.8)" }}
-            className="absolute left-6 top-9 -rotate-[18deg] rounded-lg border-[3px] border-[#FF007F] px-4 py-1 font-display text-4xl font-bold tracking-wider text-[#FF007F]">LIKE</div>
+            className="absolute left-6 top-9 -rotate-[18deg] rounded-lg border-[3px] border-[#FF007F] px-4 py-1 font-display text-4xl font-bold tracking-wider text-[#FF007F]">{tr("LIKE")}</div>
           <div data-stamp="nope" style={{ opacity: 0, transition: "opacity .15s ease", textShadow: "0 0 18px rgba(0,229,255,.8)" }}
-            className="absolute right-6 top-9 rotate-[18deg] rounded-lg border-[3px] border-[#00E5FF] px-4 py-1 font-display text-4xl font-bold tracking-wider text-[#00E5FF]">NOPE</div>
+            className="absolute right-6 top-9 rotate-[18deg] rounded-lg border-[3px] border-[#00E5FF] px-4 py-1 font-display text-4xl font-bold tracking-wider text-[#00E5FF]">{tr("NOPE")}</div>
           <div className="absolute inset-x-0 bottom-0 p-6 pb-7">
             <div className="flex items-end gap-2">
               <h2 className="font-display text-4xl font-bold leading-none text-white">{profile.name}</h2>
@@ -539,11 +750,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         <div className="absolute inset-0 flex flex-col items-center justify-center px-8 text-center">
           <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full border-2 border-[#FF007F]/70"
                style={{ boxShadow: "0 0 30px rgba(255,0,127,.45), inset 0 0 18px rgba(255,0,127,.25)" }}><PulseLogo /></div>
-          <h3 className="font-display text-2xl font-bold text-white">You're all caught up</h3>
-          <p className="mt-2 max-w-xs text-sm leading-relaxed text-white/50">No more people nearby right now. Take another look while you wait.</p>
+          <h3 className="font-display text-2xl font-bold text-white">{tr("You're all caught up")}</h3>
+          <p className="mt-2 max-w-xs text-sm leading-relaxed text-white/50">{tr("No more people nearby right now. Take another look while you wait.")}</p>
           <button onClick={onReset}
             className="mt-7 rounded-full border-2 border-[#FF007F] px-7 py-2.5 font-display text-sm font-bold uppercase tracking-widest text-[#FF007F] transition-transform duration-150 hover:scale-105 active:scale-95"
-            style={{ boxShadow: "0 0 24px rgba(255,0,127,.5)" }}>Start over</button>
+            style={{ boxShadow: "0 0 24px rgba(255,0,127,.5)" }}>{tr("Start over")}</button>
         </div>
       );
     }
@@ -556,8 +767,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <div className="relative">
               <video src={mediaOf(profile.id)} poster={posterOf(profile.id)} autoPlay loop muted playsInline className="h-[58vh] w-full object-cover lg:h-[440px]" style={{ backgroundColor: "#18181b", objectPosition: videoPos(profile) }} />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/25" />
-              <button onClick={onClose} aria-label="Close" className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform active:scale-90"><BackIcon /></button>
-              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />Online</div>
+              <button onClick={onClose} aria-label={tr("Close")} className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition-transform active:scale-90"><BackIcon /></button>
+              <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-full bg-black/55 px-3 py-1.5 text-xs text-white/85 backdrop-blur-sm"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />{tr("Online")}</div>
               <div className="absolute inset-x-0 bottom-0 p-5">
                 <div className="flex items-end gap-2">
                   <h2 className="font-display text-4xl font-bold leading-none">{profile.name}</h2>
@@ -572,11 +783,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             </div>
 
             <div className="space-y-6 px-5 pb-32 pt-6">
-              <Section title="About me">
+              <Section title={tr("About me")}>
                 <p className="text-[15px] leading-relaxed text-white/85">{profile.bio}</p>
               </Section>
 
-              <Section title="Essentials">
+              <Section title={tr("Essentials")}>
                 <div className="flex flex-wrap gap-2">
                   <Essential icon={<PinIcon />} text={profile.city} />
                   <Essential icon={<BriefcaseIcon />} text={profile.job} />
@@ -586,7 +797,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                 </div>
               </Section>
 
-              <Section title="Interests">
+              <Section title={tr("Interests")}>
                 <div className="flex flex-wrap gap-2">{profile.tags.map((t) => <InterestChip key={t} label={t} />)}</div>
               </Section>
 
@@ -604,12 +815,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
               <button onClick={onMessage}
                 className="flex w-full max-w-xs items-center justify-center gap-2 rounded-full bg-[#FF007F] py-3.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95"
                 style={{ boxShadow: "0 0 26px rgba(255,0,127,.6)" }}>
-                <ChatsIcon /> Send a message
+                <ChatsIcon /> {tr("Send a message")}
               </button>
             ) : (
               <>
-                <ActionButton icon={<NopeIcon />} color={CYAN} size={60} onClick={onNope} label="Nope" />
-                <ActionButton icon={<LikeIcon />} color={PINK} size={66} onClick={onLike} label="Like" />
+                <ActionButton icon={<NopeIcon />} color={CYAN} size={60} onClick={onNope} label={tr("Nope")} />
+                <ActionButton icon={<LikeIcon />} color={PINK} size={66} onClick={onLike} label={tr("Like")} />
               </>
             )}
           </div>
@@ -624,7 +835,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           style={{ background: "radial-gradient(circle at 50% 32%, rgba(255,0,127,.30), rgba(0,0,0,.94) 62%), rgba(0,0,0,.86)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}>
           <div className="anim-rise font-display text-5xl font-extrabold tracking-tight"
             style={{ backgroundImage: "linear-gradient(90deg,#FF007F,#00E5FF)", WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent", filter: "drop-shadow(0 0 16px rgba(255,0,127,.6))" }}>
-            It's a Match!
+            {tr("It's a Match!")}
           </div>
           <p className="anim-rise mt-2 text-center text-sm text-white/70" style={{ animationDelay: ".06s" }}>You and {profile.name} liked each other.</p>
 
@@ -643,9 +854,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           </div>
 
           <button onClick={onMessage} className="anim-rise w-full max-w-xs rounded-full bg-[#FF007F] py-3.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95"
-            style={{ animationDelay: ".2s", boxShadow: "0 0 26px rgba(255,0,127,.6)" }}>Send a message</button>
+            style={{ animationDelay: ".2s", boxShadow: "0 0 26px rgba(255,0,127,.6)" }}>{tr("Send a message")}</button>
           <button onClick={onKeepSwiping} className="anim-rise mt-3 w-full max-w-xs rounded-full border-2 border-white/25 py-3 font-display text-sm font-bold uppercase tracking-widest text-white/80 transition-transform hover:scale-[1.02] active:scale-95"
-            style={{ animationDelay: ".27s" }}>Keep swiping</button>
+            style={{ animationDelay: ".27s" }}>{tr("Keep swiping")}</button>
         </div>
       );
     }
@@ -710,14 +921,14 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                   onSwipe={swipe} onLeft={onLeft} onTap={() => onOpenDetail(profile)} />;
               })}
               {empty && (loading
-                ? <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50"><div className="h-9 w-9 animate-spin rounded-full border-2 border-white/15 border-t-[#FF007F]" /><span className="text-sm">Loading profiles…</span></div>
+                ? <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/50"><div className="h-9 w-9 animate-spin rounded-full border-2 border-white/15 border-t-[#FF007F]" /><span className="text-sm">{tr("Loading profiles…")}</span></div>
                 : <DeckEmpty onReset={reset} />)}
             </div>
           </div>
           <div className="flex shrink-0 items-center justify-center gap-5 py-3">
-            <ActionButton icon={<RewindIcon />} color={GOLD} size={52} onClick={rewind} disabled={!history.length} label="Rewind last swipe" />
-            <ActionButton icon={<NopeIcon />} color={CYAN} size={66} onClick={() => swipe("left")} disabled={empty} label="Nope" />
-            <ActionButton icon={<LikeIcon />} color={PINK} size={66} onClick={() => swipe("right")} disabled={empty} label="Like" />
+            <ActionButton icon={<RewindIcon />} color={GOLD} size={52} onClick={rewind} disabled={!history.length} label={tr("Rewind last swipe")} />
+            <ActionButton icon={<NopeIcon />} color={CYAN} size={66} onClick={() => swipe("left")} disabled={empty} label={tr("Nope")} />
+            <ActionButton icon={<LikeIcon />} color={PINK} size={66} onClick={() => swipe("right")} disabled={empty} label={tr("Like")} />
           </div>
         </div>
       );
@@ -727,8 +938,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     function ExploreScreen({ onOpen, profiles }) {
       return (
         <div className="no-scrollbar h-full overflow-y-auto px-4 pt-2 pb-6">
-          <h2 className="mb-0.5 font-display text-2xl font-bold">Explore</h2>
-          <p className="mb-4 text-sm text-white/50">Fresh faces near you</p>
+          <h2 className="mb-0.5 font-display text-2xl font-bold">{tr("Explore")}</h2>
+          <p className="mb-4 text-sm text-white/50">{tr("Fresh faces near you")}</p>
           <div className="grid grid-cols-2 gap-3">
             {profiles.map((p) => <GridCard key={p.id} p={p} onClick={() => onOpen(p)} />)}
           </div>
@@ -739,12 +950,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     /* --------------------------- Likes --------------------------- */
     function LikesScreen({ liked, goHome, onOpen }) {
       if (!liked.length) {
-        return <EmptyTab icon={<LikesTabIcon />} title="No likes yet" text="Swipe right on someone you like and they'll show up here." action="Start swiping" onAction={goHome} />;
+        return <EmptyTab icon={<LikesTabIcon />} title={tr("No likes yet")} text={tr("Swipe right on someone you like and they'll show up here.")} action={tr("Start swiping")} onAction={goHome} />;
       }
       return (
         <div className="no-scrollbar h-full overflow-y-auto px-4 pt-2 pb-6">
           <h2 className="mb-0.5 font-display text-2xl font-bold">Likes <span className="text-[#FF007F]">{liked.length}</span></h2>
-          <p className="mb-4 text-sm text-white/50">People you liked</p>
+          <p className="mb-4 text-sm text-white/50">{tr("People you liked")}</p>
           <div className="grid grid-cols-2 gap-3">
             {liked.map((p) => <GridCard key={p.id} p={p} onClick={() => onOpen(p)} />)}
           </div>
@@ -809,17 +1020,17 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <div className="flex flex-1 flex-col items-center justify-center px-10 text-center">
               <div className="mb-4 text-[#FF007F]"><CameraIcon /></div>
               <p className="mb-6 text-sm leading-relaxed text-white/70">{error}</p>
-              <button onClick={() => { stop(); onGallery(); }} className="mb-3 w-full max-w-xs rounded-full bg-[#FF007F] py-3 font-display text-sm font-bold uppercase tracking-widest text-white" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>Open gallery instead</button>
-              <button onClick={close} className="text-sm font-semibold text-white/50">Close</button>
+              <button onClick={() => { stop(); onGallery(); }} className="mb-3 w-full max-w-xs rounded-full bg-[#FF007F] py-3 font-display text-sm font-bold uppercase tracking-widest text-white" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>{tr("Open gallery instead")}</button>
+              <button onClick={close} className="text-sm font-semibold text-white/50">{tr("Close")}</button>
             </div>
           ) : (
             <React.Fragment>
               <video ref={videoRef} autoPlay playsInline muted className="absolute inset-0 h-full w-full object-cover" style={{ transform: facing === "user" ? "scaleX(-1)" : "none" }} />
               <div className="absolute inset-x-0 top-0 flex items-center justify-between p-4">
-                <button onClick={close} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"><XMark /></button>
-                <button onClick={flip} aria-label="Flip camera" className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"><FlipIcon /></button>
+                <button onClick={close} aria-label={tr("Close")} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"><XMark /></button>
+                <button onClick={flip} aria-label={tr("Flip camera")} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm"><FlipIcon /></button>
               </div>
-              {recording && <div className="absolute left-1/2 top-5 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm"><span className="h-2 w-2 rounded-full" style={{ background: "#FF2D55" }} />REC</div>}
+              {recording && <div className="absolute left-1/2 top-5 flex -translate-x-1/2 items-center gap-2 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm"><span className="h-2 w-2 rounded-full" style={{ background: "#FF2D55" }} />{tr("REC")}</div>}
               <div className="absolute inset-x-0 bottom-0 flex flex-col items-center gap-5 pb-9 pt-10" style={{ background: "linear-gradient(to top, rgba(0,0,0,.65), transparent)" }}>
                 {canRecord && (
                   <div className="flex rounded-full bg-black/40 p-1 backdrop-blur-sm">
@@ -828,7 +1039,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                     ))}
                   </div>
                 )}
-                <button onClick={shutter} aria-label="Capture" className="flex h-[74px] w-[74px] items-center justify-center rounded-full border-4 border-white transition-transform active:scale-95">
+                <button onClick={shutter} aria-label={tr("Capture")} className="flex h-[74px] w-[74px] items-center justify-center rounded-full border-4 border-white transition-transform active:scale-95">
                   <span style={recording ? { width: 26, height: 26, borderRadius: 6, background: "#FF2D55" } : { width: 58, height: 58, borderRadius: 9999, background: mode === "video" ? "#FF2D55" : "#fff" }} />
                 </button>
               </div>
@@ -900,9 +1111,9 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, flirty and charming — like a real woman enjoying a fun call with someone she clicked with. Tease lightly and build a nice spark, but keep it tasteful and never sexually explicit. Keep your replies short and conversational, the way people actually talk out loud. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries."
+        "If anyone asks your name, your name is " + p.name + ". If the call turns toward explicit sexual content, deflect playfully and keep it classy — stay flirty and warm, but don't go there."
       );
     }
 
@@ -1031,13 +1242,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <div className="mt-7 font-display text-3xl font-bold text-white">{profile.name}</div>
             <div className="mt-2 flex items-center gap-2 text-sm text-white/55">
               {status === "active" && <span className={"h-2 w-2 rounded-full " + (speaking ? "bg-[#FF007F] shadow-[0_0_8px_#FF007F]" : "bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]")} />}
-              {statusText}
+              {tr(statusText)}
             </div>
-            {status === "error" && <div className="mt-2 max-w-[260px] text-xs text-white/40">Make sure microphone access is allowed, then try again.</div>}
+            {status === "error" && <div className="mt-2 max-w-[260px] text-xs text-white/40">{tr("Make sure microphone access is allowed, then try again.")}</div>}
           </div>
 
           <div className="mb-4 flex items-center justify-center">
-            <button onClick={finish} aria-label="End call" className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-90" style={{ boxShadow: "0 0 26px rgba(239,68,68,.6)" }}>
+            <button onClick={finish} aria-label={tr("End call")} className="flex h-16 w-16 items-center justify-center rounded-full bg-red-500 text-white transition-transform active:scale-90" style={{ boxShadow: "0 0 26px rgba(239,68,68,.6)" }}>
               <span style={{ transform: "rotate(135deg)", display: "inline-flex" }}><PhoneIcon /></span>
             </button>
           </div>
@@ -1170,7 +1381,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const generatePhoto = (scene) => {
         setMsgs((prev) => [...prev, { from: "them", generating: true }]);
         const refFile = profile.imageFile || (profile.id + ".jpg");
-        const referenceUrl = STORAGE_BASE + "references/" + refFile;
+        const refBucket = profile.refBucket || "references";
+        const referenceUrl = STORAGE_BASE + refBucket + "/" + refFile;
         fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profileId: profile.id, scene: scene, referenceUrl: referenceUrl }) })
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error("submit failed"))))
           .then((d) => { if (!d || !d.requestId) throw new Error("no id"); pollPhoto(d.requestId, 0); })
@@ -1204,12 +1416,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       return (
         <div className="flex h-full flex-col">
           <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-2 py-2.5">
-            <button onClick={onBack} aria-label="Back" className="p-1 text-white/80"><BackIcon /></button>
+            <button onClick={onBack} aria-label={tr("Back")} className="p-1 text-white/80"><BackIcon /></button>
             <img src={posterOf(profile.id)} alt={profile.name} className="h-9 w-9 rounded-full object-cover" />
             <div className="font-display font-bold">{profile.name}</div>
             <div className="ml-auto mr-1 flex items-center gap-2.5">
-              <span className="flex items-center gap-1.5 text-xs text-white/45"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />online</span>
-              <button onClick={() => { if (!user) { requireAuth(); return; } if (econ && econ.coins < PRICE_VOICE_MIN) { econ.openShop("coins"); return; } setCallOpen(true); }} aria-label="Voice call" className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/15 text-[#FF007F] transition-transform hover:bg-[#FF007F]/25 active:scale-90" style={{ boxShadow: "0 0 12px rgba(255,0,127,.25)" }}><PhoneIcon /></button>
+              <span className="flex items-center gap-1.5 text-xs text-white/45"><span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />{tr("online")}</span>
+              <button onClick={() => { if (!user) { requireAuth(); return; } if (econ && econ.coins < PRICE_VOICE_MIN) { econ.openShop("coins"); return; } setCallOpen(true); }} aria-label={tr("Voice call")} className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/15 text-[#FF007F] transition-transform hover:bg-[#FF007F]/25 active:scale-90" style={{ boxShadow: "0 0 12px rgba(255,0,127,.25)" }}><PhoneIcon /></button>
             </div>
           </div>
           <div ref={scroller} className="no-scrollbar flex-1 space-y-2 overflow-y-auto px-3 py-4">
@@ -1219,7 +1431,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                   <img src={posterOf(profile.id)} alt={profile.name} className="h-full w-full object-cover" />
                 </div>
                 <div className="font-display text-lg font-bold text-white">You matched with {profile.name}</div>
-                <p className="mt-1 text-sm text-white/50">Say hi 👋 — break the ice first.</p>
+                <p className="mt-1 text-sm text-white/50">{tr("Say hi 👋 — break the ice first.")}</p>
               </div>
             )}
             {msgs.map((m, i) => (
@@ -1227,12 +1439,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                 {m.call ? (
                   <div className="flex items-center gap-2 rounded-full bg-white/[0.06] px-4 py-1.5 text-xs text-white/50" style={{ boxShadow: "inset 0 0 0 1px rgba(255,255,255,.08)" }}>
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .58 3.6 1 1 0 0 1-.24 1z" /></svg>
-                    <span>Voice call</span>
+                    <span>{tr("Voice call")}</span>
                   </div>
                 ) : m.generating ? (
                   <div className="flex items-center gap-2.5 rounded-2xl rounded-bl-md bg-zinc-800 px-4 py-3 text-[15px] text-white/70" style={{ boxShadow: "0 0 0 1px rgba(255,255,255,.1)" }}>
                     <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-[#FF007F]" />
-                    <span>Sending a photo…</span>
+                    <span>{tr("Sending a photo…")}</span>
                   </div>
                 ) : m.media ? (
                   <div className={"overflow-hidden rounded-2xl " + (m.from === "me" ? "rounded-br-md" : "rounded-bl-md")}
@@ -1255,24 +1467,24 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute bottom-14 left-3 z-20 w-48 overflow-hidden rounded-2xl bg-zinc-800"
                   style={{ boxShadow: "0 0 0 1px rgba(255,255,255,.08), 0 12px 34px rgba(0,0,0,.6)" }}>
-                  <button onClick={() => pick("camera")} className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] text-white hover:bg-white/5"><span className="text-[#FF007F]"><CameraIcon /></span>Camera</button>
-                  <button onClick={() => pick("gallery")} className="flex w-full items-center gap-3 border-t border-white/5 px-4 py-3 text-left text-[15px] text-white hover:bg-white/5"><span className="text-[#FF007F]"><ImageIcon /></span>Photo &amp; Video</button>
+                  <button onClick={() => pick("camera")} className="flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] text-white hover:bg-white/5"><span className="text-[#FF007F]"><CameraIcon /></span>{tr("Camera")}</button>
+                  <button onClick={() => pick("gallery")} className="flex w-full items-center gap-3 border-t border-white/5 px-4 py-3 text-left text-[15px] text-white hover:bg-white/5"><span className="text-[#FF007F]"><ImageIcon /></span>{tr("Photo & Video")}</button>
                 </div>
               </React.Fragment>
             )}
             <input ref={galleryRef} type="file" accept="image/*,video/*" onChange={onFile} className="hidden" />
-            <button onClick={() => setMenuOpen((o) => !o)} aria-label="Add photo or video"
+            <button onClick={() => setMenuOpen((o) => !o)} aria-label={tr("Add photo or video")}
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#FF007F] transition-transform active:scale-90"
               style={{ boxShadow: "inset 0 0 0 2px rgba(255,0,127,.5)" }}><PlusIcon /></button>
             <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") send(); }}
               placeholder={`Message ${profile.name}...`}
               className="min-w-0 flex-1 rounded-full bg-zinc-800 px-4 py-2.5 text-[15px] text-white placeholder-white/35 outline-none focus:ring-2 focus:ring-[#FF007F]/60" />
-            <button onClick={send} aria-label="Send" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF007F] text-white" style={{ boxShadow: "0 0 18px rgba(255,0,127,.55)" }}><SendIcon /></button>
+            <button onClick={send} aria-label={tr("Send")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#FF007F] text-white" style={{ boxShadow: "0 0 18px rgba(255,0,127,.55)" }}><SendIcon /></button>
           </div>
           {cameraOpen && <CameraCapture onClose={() => setCameraOpen(false)} onCapture={(blob) => sendMedia(blob)} onGallery={() => { setCameraOpen(false); if (galleryRef.current) galleryRef.current.click(); }} />}
           {lightbox && (
             <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/90 p-4" onClick={() => setLightbox(null)}>
-              <button onClick={() => setLightbox(null)} aria-label="Close" className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20">×</button>
+              <button onClick={() => setLightbox(null)} aria-label={tr("Close")} className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white text-2xl leading-none hover:bg-white/20">×</button>
               <img src={lightbox} alt="" onClick={(e) => e.stopPropagation()} className="max-h-[90vh] max-w-full rounded-xl object-contain" />
             </div>
           )}
@@ -1335,7 +1547,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
       if (open) return <Conversation profile={open} onBack={onBack} user={user} requireAuth={requireAuth} />;
       if (!matches.length) {
-        return <EmptyTab icon={<ChatsIcon />} title="No chats yet" text="Like someone and they'll match with you instantly. Then say hi." action="Find matches" onAction={goHome} />;
+        return <EmptyTab icon={<ChatsIcon />} title={tr("No chats yet")} text={tr("Like someone and they'll match with you instantly. Then say hi.")} action={tr("Find matches")} onAction={goHome} />;
       }
 
       const previewText = (m) => {
@@ -1346,7 +1558,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             return (
               <span className="inline-flex items-center gap-1 align-middle">
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor"><path d="M6.6 10.8a15.5 15.5 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24 11.4 11.4 0 0 0 3.6.58 1 1 0 0 1 1 1V20a1 1 0 0 1-1 1A17 17 0 0 1 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1 11.4 11.4 0 0 0 .58 3.6 1 1 0 0 1-.24 1z" /></svg>
-                <span>Voice call</span>
+                <span>{tr("Voice call")}</span>
               </span>
             );
           }
@@ -1354,13 +1566,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           if (isImg) {
             return (
               <span className="inline-flex items-center gap-1 align-middle">
-                {last.sender === "me" ? <span>You:</span> : null}
+                {last.sender === "me" ? <span>{tr("You:")}</span> : null}
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="18" height="13" rx="2" /><circle cx="12" cy="12.5" r="3.2" /><path d="M8 6l1.4-2h5.2L20 6" /></svg>
-                <span>Photo</span>
+                <span>{tr("Photo")}</span>
               </span>
             );
           }
-          return (last.sender === "me" ? "You: " : "") + last.content;
+          return (last.sender === "me" ? tr("You:") + " " : "") + last.content;
         }
         return m.sends ? m.preview : "You matched — say hi 👋";
       };
@@ -1372,8 +1584,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
       return (
         <div className="no-scrollbar h-full overflow-y-auto pt-2 pb-6">
-          <h2 className="mb-3 px-4 font-display text-2xl font-bold">Chats</h2>
-          <div className="mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-[#FF007F]/80">New matches</div>
+          <h2 className="mb-3 px-4 font-display text-2xl font-bold">{tr("Chats")}</h2>
+          <div className="mb-1 px-4 text-xs font-semibold uppercase tracking-wider text-[#FF007F]/80">{tr("New matches")}</div>
           <div className="no-scrollbar mb-3 flex gap-3 overflow-x-auto px-4 pb-1">
             {matches.map((m) => (
               <button key={m.id} onClick={() => openChat(m.id)} className="flex w-16 shrink-0 flex-col items-center gap-1">
@@ -1398,7 +1610,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                       ? <span className="text-[11px] text-white/40">{fmtTime(last.created_at)}</span>
                       : (m.sends
                         ? <span className="text-[11px] text-white/40">{m.time}</span>
-                        : <span className="rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FF007F]">New</span>)}
+                        : <span className="rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#FF007F]">{tr("New")}</span>)}
                   </div>
                   <div className="flex items-center gap-2">
                     <p className={"min-w-0 flex-1 truncate text-sm " + (unread ? "font-semibold text-white" : ((last || m.sends) ? "text-white/55" : "text-[#FF007F]/80"))}>{previewText(m)}</p>
@@ -1433,7 +1645,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           {options.map((o) => (
             <button key={o} onClick={() => onChange(o)}
               className={"flex-1 rounded-full px-3 py-1.5 text-sm font-semibold transition-colors " + (value === o ? "text-white" : "text-white/55")}
-              style={value === o ? { background: PINK, boxShadow: "0 0 14px rgba(255,0,127,.5)" } : null}>{o}</button>
+              style={value === o ? { background: PINK, boxShadow: "0 0 14px rgba(255,0,127,.5)" } : null}>{tr(o)}</button>
           ))}
         </div>
       );
@@ -1441,7 +1653,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     function RangeSingle({ min, max, value, onChange }) {
       const pct = ((value - min) / (max - min)) * 100;
       return (
-        <div className="relative h-6 select-none">
+        <div dir="ltr" className="relative h-6 select-none">
           <div className="absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-zinc-700" />
           <div className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full" style={{ left: 0, width: pct + "%", background: PINK, boxShadow: "0 0 8px rgba(255,0,127,.6)" }} />
           <input type="range" min={min} max={max} value={value} onChange={(e) => onChange(+e.target.value)} className="range-thumb absolute inset-0 w-full" />
@@ -1452,7 +1664,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [lo, hi] = value;
       const pct = (v) => ((v - min) / (max - min)) * 100;
       return (
-        <div className="relative h-6 select-none">
+        <div dir="ltr" className="relative h-6 select-none">
           <div className="absolute top-1/2 h-1 w-full -translate-y-1/2 rounded-full bg-zinc-700" />
           <div className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full" style={{ left: pct(lo) + "%", right: (100 - pct(hi)) + "%", background: PINK, boxShadow: "0 0 8px rgba(255,0,127,.6)" }} />
           <input type="range" min={min} max={max} value={lo} onChange={(e) => onChange([Math.min(+e.target.value, hi - 1), hi])} className="range-thumb absolute inset-0 w-full" />
@@ -1463,7 +1675,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     function SubHeader({ title, onBack, right }) {
       return (
         <div className="flex shrink-0 items-center gap-3 border-b border-white/10 px-2 py-3">
-          <button onClick={onBack} aria-label="Back" className="p-1 text-white/80"><BackIcon /></button>
+          <button onClick={onBack} aria-label={tr("Back")} className="p-1 text-white/80"><BackIcon /></button>
           <h2 className="font-display text-lg font-bold">{title}</h2>
           {right && <div className="ml-auto">{right}</div>}
         </div>
@@ -1512,7 +1724,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="anim-sheet relative z-10 w-full max-w-[440px] rounded-t-3xl bg-zinc-900 pb-5" style={{ boxShadow: "0 -12px 40px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,0,127,.2)" }}>
             <div className="mx-auto mt-3 h-1.5 w-10 rounded-full bg-white/15" />
             <div className="flex items-center justify-between px-5 py-3">
-              <button onClick={onClose} className="text-sm font-semibold text-white/50">Cancel</button>
+              <button onClick={onClose} className="text-sm font-semibold text-white/50">{tr("Cancel")}</button>
               <div className="font-display font-bold">{title}</div>
               <div className="w-12" />
             </div>
@@ -1544,11 +1756,11 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const save = () => { onSave(d); onBack(); };
       return (
         <div className="flex h-full flex-col">
-          <SubHeader title="Edit Profile" onBack={onBack} right={
-            <button onClick={save} className="rounded-full bg-[#FF007F] px-4 py-1.5 text-sm font-bold text-white" style={{ boxShadow: "0 0 16px rgba(255,0,127,.5)" }}>Save</button>
+          <SubHeader title={tr("Edit Profile")} onBack={onBack} right={
+            <button onClick={save} className="rounded-full bg-[#FF007F] px-4 py-1.5 text-sm font-bold text-white" style={{ boxShadow: "0 0 16px rgba(255,0,127,.5)" }}>{tr("Save")}</button>
           } />
           <div className="no-scrollbar flex-1 overflow-y-auto px-5 py-5">
-            <div className="px-1 text-xs font-semibold uppercase tracking-wider text-white/40">Photos</div>
+            <div className="px-1 text-xs font-semibold uppercase tracking-wider text-white/40">{tr("Photos")}</div>
             <div className="mt-2 grid grid-cols-3 gap-2">
               {[0, 1, 2, 3, 4, 5].map((i) => (
                 <div key={i} className="relative aspect-[3/4] overflow-hidden rounded-xl">
@@ -1561,18 +1773,18 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
                     </button>
                   )}
-                  {i === 0 && <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">Main</span>}
+                  {i === 0 && <span className="absolute bottom-1 left-1 rounded bg-black/60 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">{tr("Main")}</span>}
                 </div>
               ))}
             </div>
-            <Field label="First name"><input value={d.name} onChange={(e) => set("name", e.target.value)} className={inputCls} /></Field>
-            <Field label="Age"><SelectField value={d.age} options={AGES} onChange={(v) => set("age", v)} title="Your age" placeholder="Add your age" /></Field>
-            <Field label="About me"><textarea value={d.bio} onChange={(e) => set("bio", e.target.value)} rows={3} className={inputCls + " resize-none"} /></Field>
-            <Field label="Work"><input value={d.job} onChange={(e) => set("job", e.target.value)} className={inputCls} /></Field>
-            <Field label="Location"><input value={d.city} onChange={(e) => set("city", e.target.value)} className={inputCls} /></Field>
-            <Field label="I am"><Segmented options={["Woman", "Man", "Beyond"]} value={d.gender} onChange={(v) => set("gender", v)} /></Field>
+            <Field label={tr("First name")}><input value={d.name} onChange={(e) => set("name", e.target.value)} className={inputCls} /></Field>
+            <Field label="Age"><SelectField value={d.age} options={AGES} onChange={(v) => set("age", v)} title={tr("Your age")} placeholder={tr("Add your age")} /></Field>
+            <Field label={tr("About me")}><textarea value={d.bio} onChange={(e) => set("bio", e.target.value)} rows={3} className={inputCls + " resize-none"} /></Field>
+            <Field label={tr("Work")}><input value={d.job} onChange={(e) => set("job", e.target.value)} className={inputCls} /></Field>
+            <Field label={tr("Location")}><input value={d.city} onChange={(e) => set("city", e.target.value)} className={inputCls} /></Field>
+            <Field label={tr("I am")}><Segmented options={["Woman", "Man", "Beyond"]} value={d.gender} onChange={(v) => set("gender", v)} /></Field>
             <div className="mb-2 mt-6 flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-wider text-white/40">Interests</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-white/40">{tr("Interests")}</div>
               <div className="text-xs text-white/35">{d.interests.length}/8</div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1590,7 +1802,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     /* ---------------- Settings ---------------- */
-    function SettingsScreen({ settings, setSettings, onBack, user, onLogout }) {
+    function SettingsScreen({ settings, setSettings, onBack, user, onLogout, region, setRegion }) {
       const s = settings;
       const set = (k, v) => setSettings((p) => ({ ...p, [k]: v }));
       const [confirm, setConfirm] = useState(null);
@@ -1608,40 +1820,56 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       };
       return (
         <div className="flex h-full flex-col">
-          <SubHeader title="Settings" onBack={onBack} />
+          <SubHeader title={tr("Settings")} onBack={onBack} />
           <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-8 pt-2">
-            <SettingsGroup title="Account">
-              <InfoRow label="Email" value={user && user.email ? user.email : "Not signed in"} />
+            <SettingsGroup title={tr("Account")}>
+              <InfoRow label={tr("Email")} value={user && user.email ? user.email : "Not signed in"} />
             </SettingsGroup>
-            <SettingsGroup title="Preferences">
+            <SettingsGroup title={tr("Preferences")}>
               <div className="px-4 py-3.5">
-                <div className="mb-2 text-[15px]">Show me</div>
+                <div className="mb-2 text-[15px]">{tr("Show me")}</div>
                 <Segmented options={["Women", "Men", "Everyone"]} value={s.showMe} onChange={(v) => set("showMe", v)} />
               </div>
               <div className="px-4 py-3.5">
-                <div className="mb-1 flex items-center justify-between"><span className="text-[15px]">Age range</span><span className="text-sm text-[#FF007F]">{s.ageRange[0]} – {s.ageRange[1]}</span></div>
+                <div className="mb-1 flex items-center justify-between"><span className="text-[15px]">{tr("Age range")}</span><span dir="ltr" className="text-sm text-[#FF007F]">{s.ageRange[0]} – {s.ageRange[1]}</span></div>
                 <RangeDual min={18} max={60} value={s.ageRange} onChange={(v) => set("ageRange", v)} />
               </div>
             </SettingsGroup>
-            <SettingsGroup title="Data & privacy">
+            <SettingsGroup title={tr("Region")}>
+              <div className="px-4 py-3.5">
+                <div className="mb-2 text-[15px]">{tr("Edition")}</div>
+                <div className="flex gap-2">
+                  <button onClick={() => setRegion("global")}
+                    className={"flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition " + (region === "global" ? "border-[#FF007F] bg-[#FF007F]/15 text-white" : "border-white/10 text-white/55 hover:bg-white/5")}>
+                    <span className="text-base leading-none">🇺🇸</span> {tr("Global")}
+                  </button>
+                  <button onClick={() => setRegion("il")}
+                    className={"flex flex-1 items-center justify-center gap-2 rounded-xl border py-2.5 text-sm font-semibold transition " + (region === "il" ? "border-[#FF007F] bg-[#FF007F]/15 text-white" : "border-white/10 text-white/55 hover:bg-white/5")}>
+                    <span className="text-base leading-none">🇮🇱</span> {tr("Israel")}
+                  </button>
+                </div>
+                <div className="mt-2 text-xs text-white/40">{tr("Switches the lineup to the Israeli edition.")}</div>
+              </div>
+            </SettingsGroup>
+            <SettingsGroup title={tr("Data & privacy")}>
               <button onClick={() => { if (user) setConfirm("clear"); }} className="flex w-full items-center px-4 py-3.5 text-left hover:bg-white/5">
-                <div className="flex-1"><div className="text-[15px]">Clear chat history</div><div className="mt-0.5 text-xs text-white/45">Erase all conversations and memory</div></div>
+                <div className="flex-1"><div className="text-[15px]">{tr("Clear chat history")}</div><div className="mt-0.5 text-xs text-white/45">{tr("Erase all conversations and memory")}</div></div>
               </button>
               <button onClick={() => { if (user) setConfirm("delete"); }} className="flex w-full items-center px-4 py-3.5 text-left hover:bg-red-500/10">
-                <span className="flex-1 text-[15px] text-red-400">Delete account</span>
+                <span className="flex-1 text-[15px] text-red-400">{tr("Delete account")}</span>
               </button>
             </SettingsGroup>
             <div className="mt-6 space-y-2">
-              <button className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/70 hover:bg-white/5">Restore purchases</button>
-              {user ? <button onClick={onLogout} className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button> : null}
+              <button className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/70 hover:bg-white/5">{tr("Restore purchases")}</button>
+              {user ? <button onClick={onLogout} className="w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">{tr("Log out")}</button> : null}
             </div>
             <p className="mt-4 text-center text-xs text-white/25">Your AI Babe · v1.0</p>
           </div>
           {confirm === "clear" && (
-            <ConfirmDialog title="Clear chat history?" message="This permanently deletes all your conversations and memory with every companion. This can't be undone." confirmLabel="Clear" danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={clearChats} />
+            <ConfirmDialog title={tr("Clear chat history?")} message={tr("This permanently deletes all your conversations and memory with every companion. This can't be undone.")} confirmLabel={tr("Clear")} danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={clearChats} />
           )}
           {confirm === "delete" && (
-            <ConfirmDialog title="Delete your account?" message="This permanently deletes your account, your matches, and all your conversations. This can't be undone." confirmLabel="Delete account" danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={deleteAccount} />
+            <ConfirmDialog title={tr("Delete your account?")} message={tr("This permanently deletes your account, your matches, and all your conversations. This can't be undone.")} confirmLabel={tr("Delete account")} danger busy={busy} onCancel={() => setConfirm(null)} onConfirm={deleteAccount} />
           )}
         </div>
       );
@@ -1653,20 +1881,20 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const set = (k, v) => setNotifs((p) => ({ ...p, [k]: v }));
       return (
         <div className="flex h-full flex-col">
-          <SubHeader title="Notifications" onBack={onBack} />
+          <SubHeader title={tr("Notifications")} onBack={onBack} />
           <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-8 pt-2">
             <SettingsGroup title="">
-              <ToggleRow label="Push notifications" desc="Master switch for all alerts" on={n.push} onChange={(v) => set("push", v)} />
+              <ToggleRow label={tr("Push notifications")} desc={tr("Master switch for all alerts")} on={n.push} onChange={(v) => set("push", v)} />
             </SettingsGroup>
-            <SettingsGroup title="Activity">
-              <ToggleRow label="New matches" on={n.matches} onChange={(v) => set("matches", v)} disabled={!n.push} />
-              <ToggleRow label="Messages" on={n.messages} onChange={(v) => set("messages", v)} disabled={!n.push} />
-              <ToggleRow label="Likes" on={n.likes} onChange={(v) => set("likes", v)} disabled={!n.push} />
-              <ToggleRow label="Super Likes" on={n.superLikes} onChange={(v) => set("superLikes", v)} disabled={!n.push} />
+            <SettingsGroup title={tr("Activity")}>
+              <ToggleRow label={tr("New matches")} on={n.matches} onChange={(v) => set("matches", v)} disabled={!n.push} />
+              <ToggleRow label={tr("Messages")} on={n.messages} onChange={(v) => set("messages", v)} disabled={!n.push} />
+              <ToggleRow label={tr("Likes")} on={n.likes} onChange={(v) => set("likes", v)} disabled={!n.push} />
+              <ToggleRow label={tr("Super Likes")} on={n.superLikes} onChange={(v) => set("superLikes", v)} disabled={!n.push} />
             </SettingsGroup>
-            <SettingsGroup title="Other">
-              <ToggleRow label="Promotions & tips" on={n.promos} onChange={(v) => set("promos", v)} />
-              <ToggleRow label="Email notifications" on={n.email} onChange={(v) => set("email", v)} />
+            <SettingsGroup title={tr("Other")}>
+              <ToggleRow label={tr("Promotions & tips")} on={n.promos} onChange={(v) => set("promos", v)} />
+              <ToggleRow label={tr("Email notifications")} on={n.email} onChange={(v) => set("email", v)} />
             </SettingsGroup>
           </div>
         </div>
@@ -1684,21 +1912,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       ];
       return (
         <div className="flex h-full flex-col">
-          <SubHeader title="Help & Support" onBack={onBack} />
+          <SubHeader title={tr("Help & Support")} onBack={onBack} />
           <div className="no-scrollbar flex-1 overflow-y-auto px-4 pb-8 pt-3">
-            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-white/40">FAQ</div>
+            <div className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-white/40">{tr("FAQ")}</div>
             <div className="divide-y divide-white/5 overflow-hidden rounded-2xl bg-white/[0.04]">
               {faqs.map((f, i) => (
                 <div key={i}>
                   <button onClick={() => setOpen(open === i ? -1 : i)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
-                    <span className="flex-1 text-[15px]">{f.q}</span>
+                    <span className="flex-1 text-[15px]">{tr(f.q)}</span>
                     <span className={"text-white/40 transition-transform " + (open === i ? "rotate-90" : "")}><ChevronIcon /></span>
                   </button>
-                  {open === i && <p className="px-4 pb-4 text-sm leading-relaxed text-white/60">{f.a}</p>}
+                  {open === i && <p className="px-4 pb-4 text-sm leading-relaxed text-white/60">{tr(f.a)}</p>}
                 </div>
               ))}
             </div>
-            <button className="mt-5 w-full rounded-full bg-[#FF007F] py-3 font-display text-sm font-bold uppercase tracking-widest text-white" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>Contact support</button>
+            <button className="mt-5 w-full rounded-full bg-[#FF007F] py-3 font-display text-sm font-bold uppercase tracking-widest text-white" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>{tr("Contact support")}</button>
             <div className="mt-5 divide-y divide-white/5 overflow-hidden rounded-2xl bg-white/[0.04]">
               {["Community guidelines", "Terms of Service", "Privacy Policy"].map((t) => (
                 <button key={t} className="flex w-full items-center px-4 py-3.5 text-left hover:bg-white/5"><span className="flex-1 text-[15px]">{t}</span><span className="text-white/30"><ChevronIcon /></span></button>
@@ -1711,10 +1939,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
     }
 
     /* -------------------------- Profile -------------------------- */
-    function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView, user, onLogin, onLogout }) {
+    function ProfileScreen({ me, setMe, settings, setSettings, notifs, setNotifs, view, setView, user, onLogin, onLogout, region, setRegion }) {
       const econ = React.useContext(EconomyContext);
       if (view === "edit") return <ProfileEdit me={me} onSave={setMe} onBack={() => setView(null)} />;
-      if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} user={user} onLogout={onLogout} />;
+      if (view === "settings") return <SettingsScreen settings={settings} setSettings={setSettings} onBack={() => setView(null)} user={user} onLogout={onLogout} region={region} setRegion={setRegion} />;
       if (view === "notifications") return <NotificationsScreen notifs={notifs} setNotifs={setNotifs} onBack={() => setView(null)} />;
       if (view === "help") return <HelpScreen onBack={() => setView(null)} />;
       const rows = [
@@ -1732,7 +1960,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
                    style={{ background: "linear-gradient(135deg,#FF007F,#00E5FF)", boxShadow: "0 0 34px rgba(255,0,127,.5)" }}>
                 <span className="font-display text-4xl font-bold text-white">{(me.name[0] || "A").toUpperCase()}</span>
               </div>
-              <button onClick={() => { if (!user) { onLogin(); return; } setView("edit"); }} aria-label="Edit photo" className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-[#FF007F]"><EditIcon /></button>
+              <button onClick={() => { if (!user) { onLogin(); return; } setView("edit"); }} aria-label={tr("Edit photo")} className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full border-2 border-black bg-[#FF007F]"><EditIcon /></button>
             </div>
             <h2 className="mt-3 font-display text-2xl font-bold">{me.name}{me.age ? ", " + me.age : ""}</h2>
             <p className="text-sm text-white/50">{me.city ? me.city + " · " : ""}Free plan</p>
@@ -1742,7 +1970,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <div className="mt-5 flex items-center gap-3 rounded-2xl bg-white/[0.04] px-4 py-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/20 text-[#FF007F]"><ProfileIcon /></div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs text-white/45">Signed in as</div>
+                <div className="text-xs text-white/45">{tr("Signed in as")}</div>
                 <div className="truncate text-[14px] text-white/85">{user.email}</div>
               </div>
               <span className="h-2 w-2 rounded-full bg-[#00E5FF] shadow-[0_0_8px_#00E5FF]" />
@@ -1751,8 +1979,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <button onClick={onLogin} className="mt-5 flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#FF007F]/25 text-[#FF007F]"><ProfileIcon /></div>
               <div className="flex-1">
-                <div className="font-display text-[15px] font-bold">Sign up or log in</div>
-                <div className="text-xs text-white/55">Save your likes and chats across devices</div>
+                <div className="font-display text-[15px] font-bold">{tr("Sign up or log in")}</div>
+                <div className="text-xs text-white/55">{tr("Save your likes and chats across devices")}</div>
               </div>
               <span className="text-white/40"><ChevronIcon /></span>
             </button>
@@ -1761,15 +1989,15 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           {user ? (
             econ && econ.isPaid ? (
               <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,182,39,.18), rgba(255,0,127,.12))", boxShadow: "inset 0 0 0 1px rgba(255,182,39,.45)" }}>
-                <div className="font-display text-lg font-bold">You're <span className="text-[#FFB627]">{(econ.plan && econ.plan.indexOf("deluxe") === 0) ? "Deluxe" : "Premium"}</span> 💎</div>
-                <p className="mt-1 text-sm text-white/65">Unlimited likes, plus your monthly BABE Coins for chats, photos and calls.</p>
-                <button onClick={() => econ.openShop()} className="mt-3 w-full rounded-full bg-[#FFB627] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-black transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,182,39,.5)" }}>Get more coins</button>
+                <div className="font-display text-lg font-bold">{tr("You're")} <span className="text-[#FFB627]">{(econ.plan && econ.plan.indexOf("deluxe") === 0) ? tr("Deluxe") : tr("Premium")}</span> 💎</div>
+                <p className="mt-1 text-sm text-white/65">{tr("Unlimited likes, plus your monthly BABE Coins for chats, photos and calls.")}</p>
+                <button onClick={() => econ.openShop()} className="mt-3 w-full rounded-full bg-[#FFB627] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-black transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,182,39,.5)" }}>{tr("Get more coins")}</button>
               </div>
             ) : (
               <div className="mt-6 rounded-2xl p-4" style={{ background: "linear-gradient(135deg, rgba(255,0,127,.18), rgba(0,229,255,.12))", boxShadow: "inset 0 0 0 1px rgba(255,0,127,.45)" }}>
-                <div className="font-display text-lg font-bold">Your AI Babe <span className="text-[#FF007F]">Premium</span></div>
-                <p className="mt-1 text-sm text-white/65">Unlimited likes, plus monthly BABE Coins for messages, photos and voice calls.</p>
-                <button onClick={() => econ && econ.openShop()} className="mt-3 w-full rounded-full bg-[#FF007F] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>Upgrade</button>
+                <div className="font-display text-lg font-bold">Your AI Babe <span className="text-[#FF007F]">{tr("Premium")}</span></div>
+                <p className="mt-1 text-sm text-white/65">{tr("Unlimited likes, plus monthly BABE Coins for messages, photos and voice calls.")}</p>
+                <button onClick={() => econ && econ.openShop()} className="mt-3 w-full rounded-full bg-[#FF007F] py-2.5 font-display text-sm font-bold uppercase tracking-widest text-white transition-transform hover:scale-[1.02] active:scale-95" style={{ boxShadow: "0 0 22px rgba(255,0,127,.5)" }}>{tr("Upgrade")}</button>
               </div>
             )
           ) : null}
@@ -1778,15 +2006,15 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             {rows.map((r, i) => (
               <button key={r.label} onClick={() => { if (r.go === "edit" && !user) { onLogin(); return; } setView(r.go); }} className={"flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-white/5 " + (i ? "border-t border-white/5" : "")}>
                 <span className="text-[#FF007F]">{r.icon}</span>
-                <span className="flex-1 text-[15px]">{r.label}</span>
+                <span className="flex-1 text-[15px]">{tr(r.label)}</span>
                 <span className="text-white/30"><ChevronIcon /></span>
               </button>
             ))}
           </div>
 
           {user
-            ? <button onClick={onLogout} className="mt-5 w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">Log out</button>
-            : <button onClick={onLogin} className="mt-5 w-full rounded-2xl border border-[#FF007F]/40 py-3 text-sm font-semibold text-[#FF007F] hover:bg-[#FF007F]/10">Sign up / Log in</button>}
+            ? <button onClick={onLogout} className="mt-5 w-full rounded-2xl border border-white/10 py-3 text-sm font-semibold text-white/60 hover:bg-white/5">{tr("Log out")}</button>
+            : <button onClick={onLogin} className="mt-5 w-full rounded-2xl border border-[#FF007F]/40 py-3 text-sm font-semibold text-[#FF007F] hover:bg-[#FF007F]/10">{tr("Sign up / Log in")}</button>}
           <p className="mt-4 text-center text-xs text-white/25">Your AI Babe · v1.0</p>
         </div>
       );
@@ -1807,12 +2035,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           {tabs.map((t) => {
             const on = tab === t.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} aria-label={t.label}
+              <button key={t.id} onClick={() => setTab(t.id)} aria-label={tr(t.label)}
                 className="relative flex flex-1 flex-col items-center gap-1 py-1"
                 style={{ color: on ? PINK : "#71717a", filter: on ? "drop-shadow(0 0 6px rgba(255,0,127,.7))" : "none", transition: "color .15s ease" }}>
                 <t.Icon />
                 {t.badge ? <span className="absolute right-[20%] top-[-2px] min-w-[16px] rounded-full bg-[#FF007F] px-1 text-center text-[10px] font-bold leading-4 text-white" style={{ boxShadow: "0 0 8px rgba(255,0,127,.7)" }}>{t.badge}</span> : null}
-                <span className="text-[10px] font-medium tracking-wide">{t.label}</span>
+                <span className="text-[10px] font-medium tracking-wide">{tr(t.label)}</span>
               </button>
             );
           })}
@@ -1838,23 +2066,21 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <span className="font-display text-2xl font-bold tracking-[0.12em]" style={{ textShadow: "0 0 18px rgba(255,0,127,.6)" }}>Your AI Babe</span>
           </div>
           <h1 className="font-display text-4xl font-bold leading-[1.1] xl:text-5xl">
-            Match, chat &amp; <span className="bg-gradient-to-r from-[#FF007F] to-[#00E5FF] bg-clip-text text-transparent">connect</span><br />with AI companions.
+            {tr("Match, chat & connect with AI companions")}
           </h1>
-          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/55">
-            Companions with real personalities who actually get you. Swipe, match, and start a conversation that remembers everything.
-          </p>
+          <p className="mt-4 max-w-md text-[15px] leading-relaxed text-white/55">{tr("Companions with real personalities who actually get you. Swipe, match, and start a conversation that remembers everything.")}</p>
           <div className="mt-8 flex flex-col gap-4">
             {features.map((f, i) => (
               <div key={i} className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FF007F]/15 text-[#FF007F] ring-1 ring-[#FF007F]/30">{f.svg}</div>
                 <div>
-                  <div className="font-display text-[15px] font-bold">{f.title}</div>
-                  <div className="text-sm text-white/50">{f.desc}</div>
+                  <div className="font-display text-[15px] font-bold">{tr(f.title)}</div>
+                  <div className="text-sm text-white/50">{tr(f.desc)}</div>
                 </div>
               </div>
             ))}
           </div>
-          <p className="mt-8 text-xs uppercase tracking-[0.2em] text-white/30">Available on web · No download needed</p>
+          <p className="mt-8 text-xs uppercase tracking-[0.2em] text-white/30">{tr("Available on web · No download needed")}</p>
         </aside>
       );
     }
@@ -1867,7 +2093,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             <h3 className="font-display text-xl font-bold">{title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-white/60">{message}</p>
             <div className="mt-6 flex gap-3">
-              <button onClick={onCancel} disabled={busy} className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 disabled:opacity-50">Cancel</button>
+              <button onClick={onCancel} disabled={busy} className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold text-white/70 hover:bg-white/5 disabled:opacity-50">{tr("Cancel")}</button>
               <button onClick={onConfirm} disabled={busy} className={"flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 " + (danger ? "bg-red-500 hover:bg-red-600" : "bg-[#FF007F] hover:bg-[#FF1A8C]")}>{busy ? "Working…" : confirmLabel}</button>
             </div>
           </div>
@@ -1884,8 +2110,8 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
       const submit = async () => {
         setErr("");
-        if (!email.trim() || password.length < 6) { setErr("Enter a valid email and a password of at least 6 characters."); return; }
-        if (!sb) { setErr("Sign in isn't available right now. Please try again later."); return; }
+        if (!email.trim() || password.length < 6) { setErr(tr("Enter a valid email and a password of at least 6 characters.")); return; }
+        if (!sb) { setErr(tr("Sign in isn't available right now. Please try again later.")); return; }
         setBusy(true);
         try {
           const res = mode === "signup"
@@ -1902,28 +2128,28 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-5">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
           <div className="anim-up relative z-10 w-full max-w-[380px] rounded-3xl bg-zinc-900 p-6" style={{ boxShadow: "0 20px 60px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,0,127,.25)" }}>
-            <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 text-white/40 hover:text-white">
+            <button onClick={onClose} aria-label={tr("Close")} className="absolute right-4 top-4 text-white/40 hover:text-white">
               <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
             <div className="mb-2 flex items-center gap-2"><PulseLogo /><span className="font-display text-base font-bold tracking-wider">Your AI Babe</span></div>
-            <h2 className="font-display text-2xl font-bold">{mode === "signup" ? "Create your account" : "Welcome back"}</h2>
-            <p className="mt-1 mb-5 text-sm text-white/55">{mode === "signup" ? "Sign up to start chatting with your matches." : "Log in to continue your conversations."}</p>
+            <h2 className="font-display text-2xl font-bold">{mode === "signup" ? tr("Create your account") : tr("Welcome back")}</h2>
+            <p className="mt-1 mb-5 text-sm text-white/55">{mode === "signup" ? tr("Sign up to start chatting with your matches.") : tr("Log in to continue your conversations.")}</p>
 
             {mode === "signup" ? (
               <div className="mb-5 flex items-center gap-3 rounded-2xl bg-[#FFB627]/10 px-4 py-3" style={{ boxShadow: "inset 0 0 0 1px rgba(255,182,39,.3)" }}>
                 <CoinIcon size={30} />
                 <div className="text-sm leading-tight">
-                  <div className="font-bold text-[#FFB627]">50 BABE Coins free 🎁</div>
-                  <div className="text-white/50">Get them instantly when you sign up.</div>
+                  <div className="font-bold text-[#FFB627]">{tr("50 BABE Coins free 🎁")}</div>
+                  <div className="text-white/50">{tr("Get them instantly when you sign up.")}</div>
                 </div>
               </div>
             ) : null}
 
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">Email</label>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">{tr("Email")}</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" autoComplete="email"
               className="mb-3 w-full rounded-xl bg-white/[0.06] px-4 py-3 text-[15px] text-white outline-none focus:ring-2 focus:ring-[#FF007F]/50" />
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">Password</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete={mode === "signup" ? "new-password" : "current-password"}
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wider text-white/45">{tr("Password")}</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={tr("At least 6 characters")} autoComplete={mode === "signup" ? "new-password" : "current-password"}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
               className="mb-2 w-full rounded-xl bg-white/[0.06] px-4 py-3 text-[15px] text-white outline-none focus:ring-2 focus:ring-[#FF007F]/50" />
 
@@ -1931,13 +2157,13 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
 
             <button onClick={submit} disabled={busy}
               className="mt-3 w-full rounded-xl bg-gradient-to-r from-[#FF007F] to-[#FF4D9E] py-3 font-display text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(255,0,127,.4)] transition active:scale-[0.98] disabled:opacity-60">
-              {busy ? "Please wait…" : (mode === "signup" ? "Sign up" : "Log in")}
+              {busy ? tr("Please wait…") : (mode === "signup" ? tr("Sign up") : tr("Log in"))}
             </button>
 
             <div className="mt-4 text-center text-sm text-white/55">
-              {mode === "signup" ? "Already have an account? " : "New here? "}
+              {mode === "signup" ? tr("Already have an account? ") : tr("New here? ")}
               <button onClick={() => { setErr(""); setMode(mode === "signup" ? "login" : "signup"); }} className="font-semibold text-[#FF007F]">
-                {mode === "signup" ? "Log in" : "Sign up"}
+                {mode === "signup" ? tr("Log in") : tr("Sign up")}
               </button>
             </div>
           </div>
@@ -1978,12 +2204,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         return (
           <button onClick={() => setSel(tier)} className="relative flex-1 rounded-2xl p-4 text-left transition-all"
             style={{ background: active ? (isDeluxe ? "rgba(255,182,39,.08)" : "rgba(255,0,127,.08)") : "rgba(255,255,255,.03)", boxShadow: active ? (isDeluxe ? "inset 0 0 0 2px #FFB627" : "inset 0 0 0 2px #FF007F") : "inset 0 0 0 1px rgba(255,255,255,.08)" }}>
-            {isDeluxe && <span className="absolute -top-2 right-3 rounded-full bg-[#FFB627] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-black" style={{ boxShadow: "0 0 14px rgba(255,182,39,.7)" }}>Best Value</span>}
-            <div className={"text-sm font-bold " + (isDeluxe ? "text-[#FFB627]" : "text-[#FF007F]")}>{pi.label}</div>
-            <div className="mt-1 flex items-end gap-1"><span className="font-display text-2xl font-extrabold text-white">{pi.priceMo}</span><span className="pb-1 text-xs text-white/40">/mo</span></div>
-            <div className="text-xs text-white/30 line-through">{pi.was}/mo</div>
+            {isDeluxe && <span className="absolute -top-2 right-3 rounded-full bg-[#FFB627] px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide text-black" style={{ boxShadow: "0 0 14px rgba(255,182,39,.7)" }}>{tr("Best Value")}</span>}
+            <div className={"text-sm font-bold " + (isDeluxe ? "text-[#FFB627]" : "text-[#FF007F]")}>{tr(pi.label)}</div>
+            <div className="mt-1 flex items-end gap-1"><span className="font-display text-2xl font-extrabold text-white">{pi.priceMo}</span><span className="pb-1 text-xs text-white/40">{tr("/mo")}</span></div>
+            <div className="text-xs text-white/30 line-through">{pi.was}{tr("/mo")}</div>
             {cycle === "yearly" ? <div className="mt-1 text-xs font-semibold text-emerald-400">+{pi.bonus.toLocaleString()} bonus coins</div> : null}
-            {owned ? <div className="mt-1 text-[11px] font-bold text-white/60">Current plan</div> : null}
+            {owned ? <div className="mt-1 text-[11px] font-bold text-white/60">{tr("Current plan")}</div> : null}
           </button>
         );
       }
@@ -1993,34 +2219,34 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={onClose} />
           <div className="anim-sheet no-scrollbar relative z-10 max-h-[92vh] w-full max-w-[440px] overflow-y-auto rounded-t-3xl bg-[#0d0d0f] p-5 pb-8 sm:rounded-3xl" style={{ boxShadow: "0 -10px 60px rgba(0,0,0,.7), inset 0 0 0 1px rgba(255,255,255,.06)" }}>
             <div className="mb-1 flex items-center justify-between">
-              <h2 className="font-display text-2xl font-extrabold text-white">Go <span className="text-[#FF007F]">Premium</span></h2>
-              <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white hover:bg-white/20">×</button>
+              <h2 className="font-display text-2xl font-extrabold text-white">Go <span className="text-[#FF007F]">{tr("Premium")}</span></h2>
+              <button onClick={onClose} aria-label={tr("Close")} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white hover:bg-white/20">×</button>
             </div>
             {reasonText
               ? <p className="mb-4 text-sm text-[#FFB627]">{reasonText} — unlock more below.</p>
-              : <p className="mb-4 text-sm text-white/45">Unlock everything Your AI Babe has to offer.</p>}
+              : <p className="mb-4 text-sm text-white/45">{tr("Unlock everything Your AI Babe has to offer.")}</p>}
 
             <div className="mb-4 flex rounded-full bg-white/[0.06] p-1 text-sm font-semibold">
-              <button onClick={() => setCycle("monthly")} className={"flex-1 rounded-full py-2 " + (cycle === "monthly" ? "bg-white/15 text-white" : "text-white/50")}>Monthly</button>
-              <button onClick={() => setCycle("yearly")} className={"flex-1 rounded-full py-2 " + (cycle === "yearly" ? "bg-white/15 text-white" : "text-white/50")}>Yearly <span className="text-emerald-400">Save 50%</span></button>
+              <button onClick={() => setCycle("monthly")} className={"flex-1 rounded-full py-2 " + (cycle === "monthly" ? "bg-white/15 text-white" : "text-white/50")}>{tr("Monthly")}</button>
+              <button onClick={() => setCycle("yearly")} className={"flex-1 rounded-full py-2 " + (cycle === "yearly" ? "bg-white/15 text-white" : "text-white/50")}>Yearly <span className="text-emerald-400">{tr("Save 50%")}</span></button>
             </div>
 
             <div className="flex gap-3">{planCard("premium")}{planCard("deluxe")}</div>
             <div className="mt-3 text-center text-xs text-white/40">{info.billed}{info.note ? <div className="mt-0.5 text-emerald-400">{info.note}</div> : null}</div>
 
             <button onClick={() => onSubscribe(key)} className={"mt-4 w-full rounded-2xl py-3.5 font-bold transition-transform active:scale-[0.98] " + (sel === "deluxe" ? "bg-gradient-to-r from-[#FFB627] to-[#ff9500] text-black" : "bg-gradient-to-r from-[#FF007F] to-[#ff4fa3] text-white")} style={{ boxShadow: sel === "deluxe" ? "0 0 26px rgba(255,182,39,.5)" : "0 0 26px rgba(255,0,127,.5)" }}>
-              Subscribe to {info.label}
+              {tr("Subscribe to")} {tr(info.label)}
             </button>
-            <p className="mt-2 text-center text-xs text-white/30">Private &amp; secure · Cancel anytime · Demo mode</p>
+            <p className="mt-2 text-center text-xs text-white/30">{tr("Private & secure · Cancel anytime · Demo mode")}</p>
 
-            <div className="mb-2 mt-7 text-sm font-bold uppercase tracking-wider text-white/40">BABE Coin packs</div>
+            <div className="mb-2 mt-7 text-sm font-bold uppercase tracking-wider text-white/40">{tr("BABE Coin packs")}</div>
             <div className="space-y-2.5">
               {COIN_PACKS.map(function (pack) {
                 return (
                   <div key={pack.coins} className="flex items-center gap-3 rounded-2xl bg-white/[0.04] p-3" style={{ boxShadow: pack.popular ? "inset 0 0 0 1.5px rgba(255,0,127,.5)" : "inset 0 0 0 1px rgba(255,255,255,.07)" }}>
                     <CoinIcon size={26} />
                     <div className="flex-1">
-                      <div className="font-bold text-white">{pack.coins.toLocaleString()} <span className="text-white/50">coins</span>{pack.popular ? <span className="ml-2 rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase text-[#FF007F]">Popular</span> : null}</div>
+                      <div className="font-bold text-white">{pack.coins.toLocaleString()} <span className="text-white/50">{tr("coins")}</span>{pack.popular ? <span className="ml-2 rounded-full bg-[#FF007F]/20 px-2 py-0.5 text-[10px] font-bold uppercase text-[#FF007F]">{tr("Popular")}</span> : null}</div>
                     </div>
                     <button onClick={() => onBuyPack(pack.coins)} className="rounded-full bg-[#FF007F] px-4 py-2 text-sm font-bold text-white transition-transform active:scale-90" style={{ boxShadow: "0 0 16px rgba(255,0,127,.4)" }}>{pack.price}</button>
                   </div>
@@ -2048,6 +2274,24 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const [shop, setShop] = useState(null);
       const [toast, setToast] = useState(null);
       const [dbGirls, setDbGirls] = useState([]);
+      const [region, setRegion] = useState(function () {
+        try { return localStorage.getItem("pulse_edition") === "il" ? "il" : "global"; } catch (e) { return "global"; }
+      });
+      const changeRegion = function (r) {
+        const next = (r === "il") ? "il" : "global";
+        UI_LANG = (next === "il") ? "he" : "en";
+        try { localStorage.setItem("pulse_edition", next); } catch (e) {}
+        setRegion(next);
+      };
+      useEffect(function () {
+        var he = (region === "il");
+        UI_LANG = he ? "he" : "en";
+        try {
+          document.documentElement.setAttribute("dir", he ? "rtl" : "ltr");
+          document.documentElement.setAttribute("lang", he ? "he" : "en");
+          if (he) { document.body.classList.add("he-ui"); } else { document.body.classList.remove("he-ui"); }
+        } catch (e) {}
+      }, [region]);
       const [girlsLoaded, setGirlsLoaded] = useState(false);
       const walletRef = useRef(null);
       const user = session ? session.user : null;
@@ -2128,27 +2372,33 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         return function () { cancelled = true; };
       }, [user]);
 
-      // Load database-driven girls and register their media (videos + reference images).
+      // Load database-driven girls for the ACTIVE edition and register their media.
       useEffect(() => {
         if (!sb) return;
         let cancelled = false;
-        sb.from("girls").select("*").eq("active", true).order("sort", { ascending: true }).then(function (res) {
+        const ed = EDITIONS[region] || EDITIONS.global;
+        // Switching editions: clear the previous lineup + its media so nothing bleeds across.
+        setGirlsLoaded(false);
+        setDbGirls([]);
+        window.MEDIA = {};
+        window.POSTERS = {};
+        sb.from(ed.table).select("*").eq("active", true).order("sort", { ascending: true }).then(function (res) {
           if (cancelled) return;
           if (res.data) {
-            window.MEDIA = window.MEDIA || {};
-            window.POSTERS = window.POSTERS || {};
             const mapped = res.data.map(dbRowToProfile);
             mapped.forEach(function (p) {
+              p.refBucket = ed.refBucket;
+              p.vidBucket = ed.vidBucket;
               PROFILE_INDEX[p.id] = p;
-              if (p.videoFile) window.MEDIA[p.id] = STORAGE_BASE + "girl-videos/" + p.videoFile;
-              if (p.imageFile) window.POSTERS[p.id] = STORAGE_BASE + "references/" + p.imageFile;
+              if (p.videoFile) window.MEDIA[p.id] = STORAGE_BASE + ed.vidBucket + "/" + p.videoFile;
+              if (p.imageFile) window.POSTERS[p.id] = STORAGE_BASE + ed.refBucket + "/" + p.imageFile;
             });
             setDbGirls(mapped);
           }
           setGirlsLoaded(true);
         });
         return function () { cancelled = true; };
-      }, []);
+      }, [region]);
 
       const allProfiles = React.useMemo(function () { return dbGirls.concat(PROFILES); }, [dbGirls]);
 
@@ -2175,12 +2425,12 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       const subscribe = (planKey) => {
         const inf = PLAN_INFO[planKey]; const w = walletRef.current; if (!w || !inf) return;
         applyWallet(Object.assign({}, w, { coins: w.coins + inf.grant + (inf.bonus || 0), plan: planKey, plan_since: new Date().toISOString() }));
-        setShop(null); showToast("Purchase Successful! 🎉");
+        setShop(null); showToast(tr("Purchase Successful! 🎉"));
       };
       const buyPack = (coins) => {
         const w = walletRef.current; if (!w) return;
         applyWallet(Object.assign({}, w, { coins: w.coins + coins }));
-        showToast("Purchase Successful! 🎉");
+        showToast(tr("Purchase Successful! 🎉"));
       };
       const registerSwipe = () => {
         const w = walletRef.current;
@@ -2254,8 +2504,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
           <div className="relative z-10 flex w-full max-w-[440px] flex-col overflow-hidden lg:h-[min(860px,90vh)] lg:rounded-[44px] lg:bg-black lg:shadow-[0_30px_90px_rgba(0,0,0,.65)] lg:ring-1 lg:ring-white/10">
           {!hideChrome && (
             <header className="relative flex shrink-0 items-center justify-center gap-2 pt-5 pb-2.5">
-              <PulseLogo />
-              <span className="font-display text-lg font-bold tracking-[0.12em] text-white" style={{ textShadow: "0 0 14px rgba(255,0,127,.6)" }}>Your AI Babe</span>
+              <BrandMark region={region} />
               {user && wallet ? <div className="absolute right-4 top-1/2 -translate-y-1/2"><CoinPill coins={wallet.coins} onClick={() => openShop()} /></div> : null}
             </header>
           )}
@@ -2267,7 +2516,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
             {tab === "explore" && <ExploreScreen onOpen={setDetailProfile} profiles={allProfiles} />}
             {tab === "likes" && <LikesScreen liked={liked} goHome={() => setTab("home")} onOpen={setDetailProfile} />}
             {tab === "chats" && <ChatsScreen matches={matches} goHome={() => setTab("home")} openId={chatOpenId} onOpen={setChatOpenId} onBack={() => setChatOpenId(null)} user={user} requireAuth={requireAuth} />}
-            {tab === "profile" && <ProfileScreen me={me} setMe={saveMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} />}
+            {tab === "profile" && <ProfileScreen me={me} setMe={saveMe} settings={settings} setSettings={setSettings} notifs={notifs} setNotifs={setNotifs} view={profileView} setView={setProfileView} user={user} onLogin={requireAuth} onLogout={logout} region={region} setRegion={changeRegion} />}
           </div>
 
           {!hideChrome && <TabBar tab={tab} setTab={goTab} likeCount={liked.length} />}
