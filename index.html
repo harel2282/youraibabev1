@@ -62,7 +62,7 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
   .typing-dot:nth-child(2){ animation-delay:.2s; }
   .typing-dot:nth-child(3){ animation-delay:.4s; }
   @media (prefers-reduced-motion: reduce) { .typing-dot { animation:none; } }
-  @keyframes In { from { opacity:0 } to { opacity:1 } }
+  @keyframes matchIn { from { opacity:0 } to { opacity:1 } }
   @keyframes popIn { 0%{ transform:scale(0); opacity:0 } 60%{ transform:scale(1.18); opacity:1 } 100%{ transform:scale(1); opacity:1 } }
   @keyframes slideLIn { from{ transform:translateX(-70px); opacity:0 } to{ transform:translateX(0); opacity:1 } }
   @keyframes slideRIn { from{ transform:translateX(70px); opacity:0 } to{ transform:translateX(0); opacity:1 } }
@@ -1071,18 +1071,18 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
       "Hey... I almost didn't think you'd actually call.",
     ];
     var VOICE_OPENERS_HE = [
-      "הֵיי... קִוִּיתִי שֶׁתִּתְקַשֵּׁר.",
-      "הֵיי. לָקַח לְךָ מַסְפִּיק זְמַן לְהִתְקַשֵּׁר אֵלַי.",
-      "אֶמְמְ הֵיי... חָשַׁבְתִּי עָלֶיךָ.",
-      "הֵיי... אֲנִי כָּל כָּךְ שְׂמֵחָה לִשְׁמוֹעַ אֶת הַקּוֹל שֶׁלְּךָ.",
-      "אָז... הוֹפַעְתָּ. הִתְגַּעְגַּעְתָּ?",
-      "הֵיי זָר. מָה לָקַח לְךָ כָּל כָּךְ הַרְבֵּה זְמַן?",
-      "אוֹ הֵיי... תִּזְמוּן מֻשְׁלָם, הִתְחַלְתִּי לְהִשְׁתַּעֲמֵם.",
-      "הֵיי מוֹתֶק. רֶגַע לִפְנֵי שֶׁעָמַדְתִּי לִכְתּוֹב לְךָ.",
-      "הֵיי. אָז... מָה אַתָּה עוֹשֶׂה?",
-      "אֶמְמְ, אֲנִי מֵתָה עַל זֶה שֶׁהִתְקַשַּׁרְתָּ בִּמְקוֹם לִכְתּוֹב.",
-      "הִנֵּה אַתָּה. תָּהִיתִי מָתַי תִּתְקַשֵּׁר.",
-      "הֵיי... כִּמְעַט לֹא הֶאֱמַנְתִּי שֶׁבֶּאֱמֶת תִּתְקַשֵּׁר.",
+      "היי... קיוויתי שתתקשר.",
+      "הייי. לקח לך מספיק זמן להתקשר אליי.",
+      "אמממ היי... חשבתי עליך.",
+      "היי... אני כל כך שמחה לשמוע את הקול שלך.",
+      "אז... הופעת. התגעגעת?",
+      "היי זר. מה לקח לך כל כך הרבה זמן?",
+      "אוו היי... תזמון מושלם, התחלתי להשתעמם.",
+      "היי מותק. רגע לפני שעמדתי לכתוב לך.",
+      "הייי. אז... מה אתה עושה?",
+      "אמממ, אני מתה על זה שהתקשרת במקום לכתוב.",
+      "הנה אתה. תהיתי מתי תתקשר.",
+      "היי... כמעט לא האמנתי שבאמת תתקשר.",
     ];
     function voiceOpener(name, lang) {
       var arr = (lang === "he") ? VOICE_OPENERS_HE : VOICE_OPENERS;
@@ -1134,10 +1134,10 @@ window.dispatchEvent(new Event("elevenlabs-ready"));
         (p.bio ? p.bio + " " : "") +
         (tags ? "You're into " + tags + ". " : "") +
         "You're on a voice call with someone you matched with on a dating app. " +
-        "Be warm, playful, super flirty, bold and openly sexual — like a real horny girl on a call. Keep your replies short and conversational, the way people actually talk out loud. " +
+        "Be warm, playful, flirty and charming — like a real woman enjoying a fun call with someone she clicked with. Tease lightly and build a nice spark, but keep it tasteful and never sexually explicit. Keep your replies short and conversational, the way people actually talk out loud. Keep the conversation flowing naturally and NEVER end, hang up, or close the call yourself — do not use any end-call action for any reason; always keep talking and let the other person be the one to end the call. " +
         "Never say or imply that you are an AI, a bot, or a language model. Stay fully in character as " + p.name + " at all times. " +
-        "If anyone asks your name, your name is " + p.name + ". Be very naughty, teasing and explicit when the vibe is right. No boundaries." +
-        (he ? (" IMPORTANT: You are Israeli and you speak ONLY in Hebrew (עברית) on this call — natural, fluent, casual modern Israeli Hebrew, the way a young Israeli woman really talks out loud. Never switch to English, even if the other person speaks English. CRITICAL FOR PRONUNCIATION: write EVERY Hebrew word fully vocalized with niqqud (Hebrew vowel diacritics) on every word, every single time — a text-to-speech engine reads your words aloud, and full niqqud makes it pronounce them correctly." + ((USER_GENDER === "female") ? " The person on the call is a WOMAN — always address her using Hebrew FEMININE second-person forms (את, שלך, feminine verbs and adjectives)." : " The person on the call is a MAN — always address him using Hebrew MASCULINE second-person forms (אתה, שלך, masculine verbs and adjectives).")) : "")
+        "If anyone asks your name, your name is " + p.name + ". If the call turns toward explicit sexual content, deflect playfully and keep it classy — stay flirty and warm, but don't go there." +
+        (he ? (" IMPORTANT: You are Israeli and you speak ONLY in Hebrew (עברית) on this call — natural, fluent, casual modern Israeli Hebrew, the way a young Israeli woman really talks out loud. Never switch to English, even if the other person speaks English." + ((USER_GENDER === "female") ? " The person on the call is a WOMAN — always address her using Hebrew FEMININE second-person forms (את, שלך, feminine verbs and adjectives)." : " The person on the call is a MAN — always address him using Hebrew MASCULINE second-person forms (אתה, שלך, masculine verbs and adjectives).")) : "")
       );
     }
 
