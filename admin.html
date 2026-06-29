@@ -114,6 +114,10 @@
   .btn:active{transform:translateY(1px)}
   .btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;filter:grayscale(.4)}
 
+  .ai-note{font-size:13px;color:var(--cyan);background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.22);
+    border-radius:11px;padding:11px 13px;margin-top:14px;line-height:1.5}
+  .analyze-warn{font-size:12.5px;color:var(--warn);background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.3);
+    border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.5}
   .status{margin-top:14px;font-size:13.5px;color:var(--muted);min-height:20px;display:flex;align-items:center;gap:8px}
   .status .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);flex:0 0 auto}
   .status.busy .dot{animation:pulse 1s infinite}
@@ -187,15 +191,7 @@
   <div class="card">
     <div class="label">ההודעה / הבקשה</div>
     <textarea id="msg" placeholder="לדוגמה: תשלחי לי תמונה שלך מהחוף בשקיעה…"></textarea>
-    <div class="row">
-      <label class="switch">
-        <input type="checkbox" id="expand" checked />
-        <span class="track"></span>
-      </label>
-      <div class="txt">ה‑AI כותב את הפרומט מההודעה
-        <small>בדיוק כמו בצ׳אט. כבה כדי לשלוח את הטקסט כפרומט ישיר.</small>
-      </div>
-    </div>
+    <div class="ai-note">✨ ה‑AI מנתח את הבקשה והופך אותה לפרומט מפורט ואיכותי — לא מעתיק את הטקסט מילה במילה.</div>
     <button class="btn" id="gen" disabled>צור תמונה</button>
     <div class="status" id="status"></div>
   </div>
@@ -203,8 +199,9 @@
   <div class="console" id="console">
     <div class="bar"><span class="lg"></span><span class="t">PROMPT</span></div>
     <div class="body">
+      <div class="analyze-warn" id="analyzeWarn" style="display:none"></div>
       <div id="sceneWrap">
-        <h4>הפרומט שנוצר מההודעה</h4>
+        <h4>תיאור הסצנה שה‑AI יצר מהבקשה</h4>
         <pre class="scene" id="sceneOut"></pre>
         <div class="sep"></div>
       </div>
@@ -359,24 +356,29 @@
 
     fetch("/api/studio-image", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scene: message, referenceUrl: refUrl, expand: el("expand").checked, extraRefs: extraRefs })
+      body: JSON.stringify({ scene: message, referenceUrl: refUrl, extraRefs: extraRefs })
     })
     .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
     .then(function(res){
       if(!res.ok || !res.d || !res.d.requestId) throw new Error((res.d && res.d.error) || "השליחה נכשלה");
-      showPrompt(res.d.prompt, res.d.scene, message);
+      showPrompt(res.d.prompt, res.d.scene, message, res.d.analyzed, res.d.analyzeError);
       showSkeleton();
       poll(res.d.requestId, 0);
     })
     .catch(function(e){ setStatus("שגיאה: " + e.message, "err"); busy = false; refreshBtn(); });
   });
 
-  function showPrompt(prompt, scene, message){
+  function showPrompt(prompt, scene, message, analyzed, analyzeError){
     var sceneWrap = el("sceneWrap");
-    if(el("expand").checked && scene && scene.trim() && scene.trim() !== message.trim()){
+    if(scene && scene.trim()){
       sceneWrap.style.display = "block"; el("sceneOut").textContent = scene;
     } else { sceneWrap.style.display = "none"; }
     el("promptOut").textContent = prompt || "(לא התקבל פרומט)";
+    var aw = el("analyzeWarn");
+    if(analyzed === false){
+      aw.style.display = "block";
+      aw.textContent = "\u26A0 הניתוח לא רץ — נשלחה ההודעה כפי שהיא. " + (analyzeError ? ("סיבה: " + analyzeError) : "ודא שמשתנה הסביבה XAI_API_KEY מוגדר ב\u2011Vercel.");
+    } else { aw.style.display = "none"; }
     el("console").classList.add("show");
   }
   function showSkeleton(){

@@ -36,20 +36,21 @@ function buildPrompt(scene, extraRefs) {
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     refNote +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture."
+    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
   );
 }
 
-// Optional: turn a casual request into a vivid image scene (like the chat's LLM does).
-// FAILS SAFE: on missing key / timeout / error, returns the original message.
-async function expandScene(message) {
+// Analyze the request and rewrite it as a rich, photographic image prompt.
+// Returns { ok, scene, error }. ok=false means analysis did NOT run (so the caller can
+// warn instead of silently using the raw text). On failure, scene = the original message.
+async function analyzeToScene(message) {
   const msg = (message || "").trim();
-  if (!msg) return msg;
+  if (!msg) return { ok: false, scene: msg, error: "empty message" };
   const xaiKey = process.env.XAI_API_KEY;
-  if (!xaiKey) return msg;
+  if (!xaiKey) return { ok: false, scene: msg, error: "missing XAI_API_KEY on the server" };
   const model = process.env.GROK_MODEL || "grok-4.3";
   const controller = new AbortController();
-  const timer = setTimeout(function () { controller.abort(); }, 7000);
+  const timer = setTimeout(function () { controller.abort(); }, 7500);
   try {
     const r = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -58,17 +59,22 @@ async function expandScene(message) {
       body: JSON.stringify({
         model: model,
         messages: [
-          { role: "system", content: "You write concise scene descriptions for an AI image generator that edits a reference photo of one woman. Turn the user's request into a single vivid, concrete visual scene: setting, clothing, pose, expression, lighting, mood. Keep it tasteful and non-explicit. Do not mention the reference image, the camera, or phrases like 'send a photo'. Output ONLY the scene description as one short paragraph, no preamble, no quotes." },
+          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame, tasteful and non-explicit. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
           { role: "user", content: msg }
         ]
       })
     });
-    if (!r.ok) return msg;
+    if (!r.ok) {
+      const detail = await r.text();
+      return { ok: false, scene: msg, error: "LLM error " + r.status + ": " + detail.slice(0, 160) };
+    }
     const j = await r.json();
     const txt = ((j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "").toString().trim();
-    return txt || msg;
+    if (!txt) return { ok: false, scene: msg, error: "empty LLM response" };
+    return { ok: true, scene: txt, error: "" };
   } catch (e) {
-    return msg;
+    const isAbort = e && (e.name === "AbortError");
+    return { ok: false, scene: msg, error: isAbort ? "analysis timed out (try again)" : ("analysis failed: " + String((e && e.message) || e)) };
   } finally {
     clearTimeout(timer);
   }
@@ -149,9 +155,9 @@ export default async function handler(req, res) {
       const refUrl = (typeof body.referenceUrl === "string" && body.referenceUrl) ? body.referenceUrl : "";
       if (!refUrl) return res.status(400).json({ error: "Missing referenceUrl — upload a main reference image first." });
 
-      // Optionally let the LLM turn a casual request into a detailed scene (exactly like the chat does).
-      let scene = body.scene;
-      if (body.expand) scene = await expandScene(scene);
+      // Always analyze the request into a rich prompt (this is the whole point of the studio).
+      const analysis = await analyzeToScene(body.scene);
+      const scene = analysis.scene;
 
       // Up to 3 keyword-triggered extra reference images.
       let extraRefs = [];
@@ -185,7 +191,7 @@ export default async function handler(req, res) {
       const data = json && json.data ? json.data : json;
       const requestId = data && (data.id || data.request_id || data.requestId);
       if (!requestId) return res.status(502).json({ error: "No request id returned", detail: JSON.stringify(json).slice(0, 400) });
-      return res.status(200).json({ requestId: requestId, prompt: finalPrompt, scene: scene });
+      return res.status(200).json({ requestId: requestId, prompt: finalPrompt, scene: scene, analyzed: analysis.ok, analyzeError: analysis.error });
     }
 
     return res.status(405).json({ error: "Method not allowed" });
