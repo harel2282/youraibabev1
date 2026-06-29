@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Studio · ניהול תמונות</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#07070c; --surface:#11111b; --surface-2:#171723; --line:rgba(255,255,255,.09);
+    --pink:#FF007F; --cyan:#00E5FF; --text:#f4f4fa; --muted:#9595a8; --ok:#16d39a; --warn:#ffb020;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(900px 500px at 85% -10%, rgba(255,0,127,.16), transparent 60%),
+      radial-gradient(800px 520px at 0% 0%, rgba(0,229,255,.10), transparent 55%),
+      var(--bg);
+    color:var(--text); font-family:"Heebo",system-ui,sans-serif; min-height:100vh;
+    -webkit-font-smoothing:antialiased; line-height:1.5;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:28px 18px 80px}
+
+  header{display:flex; align-items:center; gap:14px; margin-bottom:6px}
+  .logo{width:42px;height:42px;border-radius:13px;flex:0 0 auto;
+    background:linear-gradient(135deg,var(--pink),#b3005a);
+    box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 8px 26px rgba(255,0,127,.45);
+    display:grid;place-items:center;font-weight:900;color:#fff;font-size:20px}
+  h1{font-size:26px;font-weight:900;margin:0;letter-spacing:-.5px}
+  .sub{color:var(--muted);font-size:13px;margin-top:2px}
+  .badge{margin-inline-start:auto;font-size:11px;font-weight:800;letter-spacing:1.5px;
+    color:var(--cyan);border:1px solid rgba(0,229,255,.4);border-radius:999px;
+    padding:5px 11px;background:rgba(0,229,255,.07);white-space:nowrap}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:18px;
+    padding:18px;margin-top:16px}
+  .label{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.4px;
+    text-transform:uppercase;margin-bottom:9px}
+  .hint-sm{font-size:12.5px;color:var(--muted);margin:-2px 0 13px;line-height:1.55}
+
+  /* reference dropzone */
+  .drop{position:relative;border:1.5px dashed rgba(255,255,255,.16);border-radius:14px;
+    background:var(--surface-2);min-height:128px;display:flex;align-items:center;
+    justify-content:center;text-align:center;cursor:pointer;overflow:hidden;
+    transition:border-color .15s, background .15s}
+  .drop:hover{border-color:rgba(255,0,127,.55);background:#1b1b29}
+  .drop.drag{border-color:var(--cyan);background:#15202a}
+  .drop.has{border-style:solid;border-color:rgba(255,0,127,.35);padding:10px}
+  .drop .hint{color:var(--muted);font-size:13.5px;padding:18px}
+  .drop .hint b{color:var(--text);font-weight:700}
+  .preview{display:flex;align-items:center;gap:14px;width:100%}
+  .preview img{width:84px;height:84px;border-radius:11px;object-fit:cover;
+    box-shadow:0 0 0 1px var(--line)}
+  .preview .meta{text-align:start;min-width:0;flex:1}
+  .preview .fn{font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .preview .st{font-size:12px;color:var(--muted);margin-top:3px}
+  .preview .st.done{color:var(--ok)}
+  .chip{font-size:12px;font-weight:700;color:var(--cyan);background:rgba(0,229,255,.08);
+    border:1px solid rgba(0,229,255,.3);border-radius:9px;padding:6px 10px;cursor:pointer}
+
+  /* fixed reference items */
+  .item{display:flex;gap:11px;align-items:center;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:13px;padding:10px;margin-bottom:10px;
+    position:relative;transition:border-color .15s, box-shadow .15s}
+  .item.matched{border-color:rgba(0,229,255,.55);
+    box-shadow:0 0 0 1px rgba(0,229,255,.25), 0 0 18px rgba(0,229,255,.12)}
+  .item-img{width:60px;height:60px;border-radius:10px;flex:0 0 auto;cursor:pointer;
+    overflow:hidden;border:1.5px dashed rgba(255,255,255,.18);display:grid;place-items:center;
+    background:#0f0f18;color:var(--muted);font-size:26px;font-weight:300;transition:opacity .15s}
+  .item-img.has{border-style:solid;border-color:rgba(255,0,127,.35)}
+  .item-img img{width:100%;height:100%;object-fit:cover}
+  .item-fields{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+  .item-fields input{background:#0f0f18;border:1px solid var(--line);border-radius:9px;
+    color:var(--text);font-family:inherit;font-size:13.5px;padding:9px 11px;width:100%}
+  .item-fields input:focus{outline:none;border-color:rgba(255,0,127,.5)}
+  .item-fields input::placeholder{color:#5a5a6c}
+  .item .rm{flex:0 0 auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);
+    background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1}
+  .item .rm:hover{color:#ff6b8a;border-color:rgba(255,107,138,.4)}
+  .item-badge{position:absolute;top:-9px;inset-inline-start:12px;font-size:10.5px;font-weight:800;
+    letter-spacing:.5px;color:#06121a;background:var(--cyan);border-radius:6px;padding:2px 8px;display:none}
+  .item.matched .item-badge{display:block}
+  .add-item{width:100%;border:1px dashed rgba(255,255,255,.2);background:transparent;color:var(--muted);
+    border-radius:11px;padding:11px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;transition:.15s}
+  .add-item:hover{border-color:rgba(0,229,255,.5);color:var(--cyan)}
+
+  textarea{width:100%;background:var(--surface-2);border:1px solid var(--line);
+    border-radius:12px;color:var(--text);font-family:inherit;font-size:15.5px;
+    padding:13px 14px;resize:vertical;min-height:96px;line-height:1.55}
+  textarea:focus{outline:none;border-color:rgba(255,0,127,.6);box-shadow:0 0 0 3px rgba(255,0,127,.12)}
+  textarea::placeholder{color:#5e5e70}
+
+  .row{display:flex;align-items:center;gap:12px;margin-top:14px}
+  .switch{position:relative;width:46px;height:27px;flex:0 0 auto}
+  .switch input{opacity:0;width:0;height:0}
+  .track{position:absolute;inset:0;background:#2a2a3a;border-radius:999px;transition:.18s;border:1px solid var(--line)}
+  .track:before{content:"";position:absolute;height:21px;width:21px;right:3px;top:2px;background:#fff;border-radius:50%;transition:.18s}
+  .switch input:checked + .track{background:linear-gradient(135deg,var(--pink),#b3005a);border-color:transparent}
+  .switch input:checked + .track:before{transform:translateX(-19px)}
+  .row .txt{font-size:14px}
+  .row .txt small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+
+  .btn{width:100%;margin-top:18px;border:none;border-radius:13px;cursor:pointer;
+    font-family:inherit;font-weight:800;font-size:16px;color:#fff;padding:15px;
+    background:linear-gradient(135deg,var(--pink),#d4006a);
+    box-shadow:0 10px 28px rgba(255,0,127,.4);transition:transform .1s, opacity .15s, filter .15s}
+  .btn:hover{filter:brightness(1.07)}
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;filter:grayscale(.4)}
+
+  .status{margin-top:14px;font-size:13.5px;color:var(--muted);min-height:20px;display:flex;align-items:center;gap:8px}
+  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--cyan);flex:0 0 auto}
+  .status.busy .dot{animation:pulse 1s infinite}
+  .status.err{color:#ff6b8a}
+  @keyframes pulse{0%,100%{opacity:.3}50%{opacity:1}}
+
+  /* console / prompt panel */
+  .console{margin-top:16px;border:1px solid rgba(0,229,255,.28);border-radius:16px;
+    background:linear-gradient(180deg,#0a1419,#0a0a12);overflow:hidden;display:none}
+  .console.show{display:block}
+  .console .bar{display:flex;align-items:center;gap:8px;padding:11px 15px;
+    border-bottom:1px solid rgba(0,229,255,.18);background:rgba(0,229,255,.05)}
+  .console .bar .lg{width:9px;height:9px;border-radius:50%;background:var(--cyan);box-shadow:0 0 9px var(--cyan)}
+  .console .bar .t{font-size:11.5px;font-weight:800;letter-spacing:1.5px;color:var(--cyan)}
+  .console .body{padding:15px 16px}
+  .console h4{margin:0 0 7px;font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .console pre{margin:0 0 14px;font-family:var(--mono);font-size:13px;line-height:1.65;
+    color:#d6f5ff;white-space:pre-wrap;word-break:break-word;direction:ltr;text-align:start}
+  .console pre.scene{color:#ffd9ec}
+  .console .sep{height:1px;background:rgba(255,255,255,.07);margin:0 0 14px}
+
+  .result{margin-top:16px;display:none}
+  .result.show{display:block}
+  .result img{width:100%;border-radius:16px;display:block;box-shadow:0 12px 40px rgba(0,0,0,.5),0 0 0 1px var(--line)}
+  .result .warn{margin-top:11px;font-size:13px;color:var(--warn);background:rgba(255,176,32,.08);
+    border:1px solid rgba(255,176,32,.3);border-radius:11px;padding:10px 13px;display:none}
+  .result .warn.show{display:block}
+  .result .actions{display:flex;gap:10px;margin-top:12px}
+  .result a.dl{font-size:13.5px;font-weight:700;color:var(--cyan);text-decoration:none;
+    border:1px solid rgba(0,229,255,.3);border-radius:10px;padding:9px 14px;background:rgba(0,229,255,.06)}
+  .skel{width:100%;aspect-ratio:1;border-radius:16px;background:linear-gradient(100deg,#13131f 30%,#1d1d2c 50%,#13131f 70%);
+    background-size:200% 100%;animation:sh 1.3s infinite;box-shadow:0 0 0 1px var(--line)}
+  @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .foot{margin-top:26px;text-align:center;color:#4d4d5e;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">S</div>
+    <div>
+      <h1>Studio</h1>
+      <div class="sub">יצירת תמונות · אותו מנוע של הצ׳אט</div>
+    </div>
+    <div class="badge">מצב מנהל</div>
+  </header>
+
+  <div class="card">
+    <div class="label">תמונת REFERENCE ראשית</div>
+    <div class="drop" id="drop">
+      <input type="file" id="file" accept="image/*" hidden />
+      <div class="hint" id="dropHint"><b>גרור לכאן תמונה</b> או לחץ לבחירה<br>הדמות שתשמש כבסיס לעריכה</div>
+      <div class="preview" id="preview" style="display:none">
+        <img id="previewImg" alt="reference" />
+        <div class="meta">
+          <div class="fn" id="previewName">—</div>
+          <div class="st" id="previewSt">מעלה…</div>
+        </div>
+        <span class="chip" id="replace">החלף</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">פריטים קבועים לפי מילת מפתח · עד 3</div>
+    <div class="hint-sm">העלה תמונת reference קבועה והגדר לה מילת מפתח. רק אם מילת המפתח תופיע בבקשה — התמונה תיכנס לייצור, והפרומט יציין שהוספנו אותה. נשמר בדפדפן הזה.</div>
+    <div id="itemsList"></div>
+    <button class="add-item" id="addItem">+ הוסף פריט</button>
+  </div>
+
+  <div class="card">
+    <div class="label">ההודעה / הבקשה</div>
+    <textarea id="msg" placeholder="לדוגמה: תשלחי לי תמונה שלך מהחוף בשקיעה…"></textarea>
+    <div class="row">
+      <label class="switch">
+        <input type="checkbox" id="expand" checked />
+        <span class="track"></span>
+      </label>
+      <div class="txt">ה‑AI כותב את הפרומט מההודעה
+        <small>בדיוק כמו בצ׳אט. כבה כדי לשלוח את הטקסט כפרומט ישיר.</small>
+      </div>
+    </div>
+    <button class="btn" id="gen" disabled>צור תמונה</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="console" id="console">
+    <div class="bar"><span class="lg"></span><span class="t">PROMPT</span></div>
+    <div class="body">
+      <div id="sceneWrap">
+        <h4>הפרומט שנוצר מההודעה</h4>
+        <pre class="scene" id="sceneOut"></pre>
+        <div class="sep"></div>
+      </div>
+      <h4>הפרומט המלא שנשלח למחולל</h4>
+      <pre id="promptOut"></pre>
+    </div>
+  </div>
+
+  <div class="result" id="result">
+    <img id="resultImg" alt="result" />
+    <div class="warn" id="warn">⚠ זוהו אולי עיוותים אנטומיים בתמונה. אפשר ללחוץ "צור תמונה" שוב.</div>
+    <div class="actions">
+      <a class="dl" id="dl" href="#" download="studio.png" target="_blank" rel="noopener">פתח / הורד</a>
+    </div>
+  </div>
+
+  <div class="foot">עמוד פנימי · לא מקושר מהאתר</div>
+</div>
+
+<script>
+  var SUPABASE_URL = "https://nmkonmvcqcejhrqjmcqv.supabase.co";
+  var SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5ta29ubXZjcWNlamhycWptY3F2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MjU3MDAsImV4cCI6MjA5NzMwMTcwMH0.tJ1gBIR9xI3Yu5PnY-8EYuHGl4vtIUiGRshq54GY6iY";
+  var sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+  var refUrl = null, uploading = false, busy = false;
+  var el = function(id){ return document.getElementById(id); };
+  var drop = el("drop"), file = el("file"), preview = el("preview"), dropHint = el("dropHint");
+  var gen = el("gen"), statusEl = el("status");
+
+  function setStatus(txt, kind){
+    statusEl.className = "status" + (kind === "busy" ? " busy" : "") + (kind === "err" ? " err" : "");
+    statusEl.innerHTML = txt ? ((kind ? '<span class="dot"></span>' : "") + txt) : "";
+  }
+  function refreshBtn(){
+    gen.disabled = busy || uploading || !refUrl || !el("msg").value.trim();
+  }
+  el("msg").addEventListener("input", function(){ refreshBtn(); updateMatch(); });
+
+  // ---------- main reference upload ----------
+  drop.addEventListener("click", function(e){ if(e.target.id !== "replace") file.click(); });
+  el("replace").addEventListener("click", function(e){ e.stopPropagation(); file.click(); });
+  drop.addEventListener("dragover", function(e){ e.preventDefault(); drop.classList.add("drag"); });
+  drop.addEventListener("dragleave", function(){ drop.classList.remove("drag"); });
+  drop.addEventListener("drop", function(e){
+    e.preventDefault(); drop.classList.remove("drag");
+    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+  file.addEventListener("change", function(){ if(file.files[0]) handleFile(file.files[0]); });
+
+  function handleFile(f){
+    if(!f.type || f.type.indexOf("image/") !== 0){ setStatus("הקובץ צריך להיות תמונה", "err"); return; }
+    if(!sb){ setStatus("טעינת Supabase נכשלה — רענן את העמוד", "err"); return; }
+    drop.classList.add("has"); dropHint.style.display = "none"; preview.style.display = "flex";
+    el("previewImg").src = URL.createObjectURL(f);
+    el("previewName").textContent = f.name;
+    var st = el("previewSt"); st.className = "st"; st.textContent = "מעלה…";
+    refUrl = null; uploading = true; refreshBtn();
+    uploadRef(f).then(function(url){
+      refUrl = url; uploading = false; st.className = "st done"; st.textContent = "✓ הועלה"; refreshBtn();
+    }).catch(function(err){
+      uploading = false; st.className = "st"; st.textContent = "";
+      setStatus("העלאה נכשלה: " + (err && err.message ? err.message : err), "err"); refreshBtn();
+    });
+  }
+
+  function uploadRef(f){
+    var ext = (f.name.split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g,"") || "png";
+    var path = "ref-" + Date.now() + "-" + Math.random().toString(36).slice(2,8) + "." + ext;
+    return sb.storage.from("admin-refs").upload(path, f, { contentType: f.type || undefined, upsert: false })
+      .then(function(res){
+        if(res.error) throw res.error;
+        return sb.storage.from("admin-refs").getPublicUrl(path).data.publicUrl;
+      });
+  }
+
+  // ---------- fixed keyword items ----------
+  var ITEMS_KEY = "studio_items_v1";
+  var items = [];
+  try { items = (JSON.parse(localStorage.getItem(ITEMS_KEY)) || []).slice(0,3); } catch(e){ items = []; }
+  function saveItems(){ try { localStorage.setItem(ITEMS_KEY, JSON.stringify(items)); } catch(e){} }
+  var itemsList = el("itemsList"), addBtn = el("addItem");
+
+  function renderItems(){
+    itemsList.innerHTML = "";
+    items.forEach(function(it, idx){
+      var row = document.createElement("div"); row.className = "item";
+      var badge = document.createElement("div"); badge.className = "item-badge"; badge.textContent = "✓ תופעל"; row.appendChild(badge);
+
+      var imgBox = document.createElement("div"); imgBox.className = "item-img" + (it.url ? " has" : "");
+      if(it.url){ var im = document.createElement("img"); im.src = it.url; imgBox.appendChild(im); } else { imgBox.appendChild(document.createTextNode("+")); }
+      var fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; fi.style.display = "none"; imgBox.appendChild(fi);
+      imgBox.addEventListener("click", function(){ fi.click(); });
+      fi.addEventListener("change", function(){ if(fi.files[0]) uploadItemImage(idx, fi.files[0], imgBox); });
+      row.appendChild(imgBox);
+
+      var fields = document.createElement("div"); fields.className = "item-fields";
+      var kw = document.createElement("input"); kw.placeholder = "מילת מפתח — אם תופיע בבקשה, התמונה תיכנס"; kw.value = it.keyword || "";
+      kw.addEventListener("input", function(){ items[idx].keyword = kw.value; saveItems(); updateMatch(); });
+      var lbl = document.createElement("input"); lbl.placeholder = "מה רואים בתמונה? (למשל: כובע אדום)"; lbl.value = it.label || "";
+      lbl.addEventListener("input", function(){ items[idx].label = lbl.value; saveItems(); });
+      fields.appendChild(kw); fields.appendChild(lbl); row.appendChild(fields);
+
+      var rm = document.createElement("button"); rm.className = "rm"; rm.textContent = "✕"; rm.title = "הסר";
+      rm.addEventListener("click", function(){ items.splice(idx,1); saveItems(); renderItems(); });
+      row.appendChild(rm);
+
+      itemsList.appendChild(row);
+    });
+    addBtn.style.display = items.length >= 3 ? "none" : "block";
+    updateMatch();
+  }
+  addBtn.addEventListener("click", function(){ if(items.length >= 3) return; items.push({ url:"", keyword:"", label:"" }); saveItems(); renderItems(); });
+
+  function uploadItemImage(idx, f, imgBox){
+    if(!f.type || f.type.indexOf("image/") !== 0){ setStatus("הקובץ צריך להיות תמונה", "err"); return; }
+    if(!sb){ setStatus("טעינת Supabase נכשלה — רענן", "err"); return; }
+    imgBox.style.opacity = ".45";
+    uploadRef(f).then(function(url){ items[idx].url = url; saveItems(); renderItems(); })
+      .catch(function(err){ imgBox.style.opacity = "1"; setStatus("העלאת הפריט נכשלה: " + (err && err.message ? err.message : err), "err"); });
+  }
+
+  function matchedItems(){
+    var msg = (el("msg").value || "").toLowerCase();
+    return items.filter(function(it){
+      var kw = (it.keyword || "").trim().toLowerCase();
+      return !!(it.url && kw && msg.indexOf(kw) !== -1);
+    });
+  }
+  function updateMatch(){
+    var msg = (el("msg").value || "").toLowerCase();
+    var rows = itemsList.querySelectorAll(".item");
+    items.forEach(function(it, idx){
+      var row = rows[idx]; if(!row) return;
+      var kw = (it.keyword || "").trim().toLowerCase();
+      row.classList.toggle("matched", !!(it.url && kw && msg.indexOf(kw) !== -1));
+    });
+  }
+
+  // ---------- generate ----------
+  gen.addEventListener("click", function(){
+    if(busy) return;
+    var message = el("msg").value.trim();
+    if(!refUrl){ setStatus("צריך להעלות תמונת reference ראשית קודם", "err"); return; }
+    if(!message){ setStatus("כתוב הודעה או תיאור", "err"); return; }
+
+    var matched = matchedItems();
+    var extraRefs = matched.map(function(it){ return { url: it.url, label: (it.label || it.keyword || "item") }; });
+
+    busy = true; refreshBtn();
+    el("console").classList.remove("show"); el("result").classList.remove("show"); el("warn").classList.remove("show");
+    setStatus("יוצר פרומט ושולח לייצור…" + (matched.length ? " (כולל " + matched.length + " פריטים)" : ""), "busy");
+
+    fetch("/api/studio-image", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ scene: message, referenceUrl: refUrl, expand: el("expand").checked, extraRefs: extraRefs })
+    })
+    .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+    .then(function(res){
+      if(!res.ok || !res.d || !res.d.requestId) throw new Error((res.d && res.d.error) || "השליחה נכשלה");
+      showPrompt(res.d.prompt, res.d.scene, message);
+      showSkeleton();
+      poll(res.d.requestId, 0);
+    })
+    .catch(function(e){ setStatus("שגיאה: " + e.message, "err"); busy = false; refreshBtn(); });
+  });
+
+  function showPrompt(prompt, scene, message){
+    var sceneWrap = el("sceneWrap");
+    if(el("expand").checked && scene && scene.trim() && scene.trim() !== message.trim()){
+      sceneWrap.style.display = "block"; el("sceneOut").textContent = scene;
+    } else { sceneWrap.style.display = "none"; }
+    el("promptOut").textContent = prompt || "(לא התקבל פרומט)";
+    el("console").classList.add("show");
+  }
+  function showSkeleton(){
+    var res = el("result"); res.classList.add("show");
+    el("resultImg").style.display = "none"; el("dl").style.display = "none";
+    if(!document.getElementById("skel")){ var s = document.createElement("div"); s.className = "skel"; s.id = "skel"; res.insertBefore(s, el("resultImg")); }
+  }
+  function clearSkeleton(){ var s = document.getElementById("skel"); if(s) s.remove(); }
+
+  function poll(id, attempt){
+    if(attempt > 40){ setStatus("הייצור לוקח יותר מדי זמן — נסה שוב", "err"); clearSkeleton(); busy = false; refreshBtn(); return; }
+    fetch("/api/studio-image?id=" + encodeURIComponent(id)).then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d && d.status === "completed" && d.url){
+          clearSkeleton();
+          var img = el("resultImg"); img.onload = function(){ img.style.display = "block"; }; img.src = d.url;
+          el("dl").href = d.url; el("dl").style.display = "inline-block";
+          if(d.ok === false){ el("warn").classList.add("show"); }
+          setStatus("הושלם ✓"); busy = false; refreshBtn();
+        } else if(d && d.status === "failed"){
+          setStatus("הייצור נכשל: " + (d.error || ""), "err"); clearSkeleton(); busy = false; refreshBtn();
+        } else {
+          setStatus("מייצר תמונה… (" + (attempt + 1) + ")", "busy");
+          setTimeout(function(){ poll(id, attempt + 1); }, 3000);
+        }
+      })
+      .catch(function(){ setStatus("שגיאת תקשורת — מנסה שוב", "busy"); setTimeout(function(){ poll(id, attempt + 1); }, 3500); });
+  }
+
+  renderItems();
+  refreshBtn();
+</script>
+</body>
+</html>
