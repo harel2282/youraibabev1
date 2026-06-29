@@ -36,7 +36,7 @@ function buildPrompt(scene, extraRefs) {
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     refNote +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
+    "Sharp focus, clean realistic detail, natural realistic skin texture."
   );
 }
 
