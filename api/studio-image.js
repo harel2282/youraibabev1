@@ -45,7 +45,7 @@ function buildPrompt(scene, extraRefs, shot) {
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     refNote +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
+    "Sharp focus, clean realistic detail, natural realistic skin texture."
   );
 }
 
@@ -69,7 +69,7 @@ async function analyzeToScene(message) {
         model: model,
         reasoning_effort: "none",
         messages: [
-          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame, tasteful and non-explicit. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
+          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
           { role: "user", content: msg }
         ]
       })
