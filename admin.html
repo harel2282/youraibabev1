@@ -114,6 +114,18 @@
   .btn:active{transform:translateY(1px)}
   .btn:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;filter:grayscale(.4)}
 
+  .seg{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .seg button{flex:1 1 auto;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);
+    border-radius:10px;padding:10px 12px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:600;
+    transition:.15s;white-space:nowrap}
+  .seg button:hover{border-color:rgba(255,0,127,.4);color:var(--text)}
+  .seg button.on{background:linear-gradient(135deg,rgba(255,0,127,.2),rgba(255,0,127,.07));border-color:var(--pink);color:#fff}
+  .size-custom{display:none;gap:8px;margin-top:9px;align-items:center}
+  .size-custom.show{display:flex}
+  .size-custom input{flex:1;background:#0f0f18;border:1px solid var(--line);border-radius:9px;color:var(--text);
+    font-family:inherit;font-size:13.5px;padding:9px 11px;text-align:center}
+  .size-custom input:focus{outline:none;border-color:rgba(255,0,127,.5)}
+  .size-custom span{color:var(--muted);font-weight:700}
   .ai-note{font-size:13px;color:var(--cyan);background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.22);
     border-radius:11px;padding:11px 13px;margin-top:14px;line-height:1.5}
   .analyze-warn{font-size:12.5px;color:var(--warn);background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.3);
@@ -191,6 +203,30 @@
   <div class="card">
     <div class="label">ההודעה / הבקשה</div>
     <textarea id="msg" placeholder="לדוגמה: תשלחי לי תמונה שלך מהחוף בשקיעה…"></textarea>
+
+    <div class="label" style="margin-top:16px">סוג הצילום</div>
+    <div class="seg" id="shotSeg">
+      <button type="button" data-shot="" class="on">כללי</button>
+      <button type="button" data-shot="mirror">סלפי מראה</button>
+      <button type="button" data-shot="selfie">סלפי רגיל</button>
+      <button type="button" data-shot="full">גוף מלא</button>
+    </div>
+
+    <div class="label" style="margin-top:16px">גודל התמונה</div>
+    <div class="seg" id="sizeSeg">
+      <button type="button" data-size="" class="on">ברירת מחדל</button>
+      <button type="button" data-size="1024*1024">1:1</button>
+      <button type="button" data-size="1024*1280">4:5</button>
+      <button type="button" data-size="1152*2048">9:16</button>
+      <button type="button" data-size="2048*1152">16:9</button>
+      <button type="button" data-size="custom">מותאם</button>
+    </div>
+    <div class="size-custom" id="sizeCustom">
+      <input id="sizeW" type="number" placeholder="רוחב" min="256" max="4096" />
+      <span>×</span>
+      <input id="sizeH" type="number" placeholder="אורך" min="256" max="4096" />
+    </div>
+
     <div class="ai-note">✨ ה‑AI מנתח את הבקשה והופך אותה לפרומט מפורט ואיכותי — לא מעתיק את הטקסט מילה במילה.</div>
     <button class="btn" id="gen" disabled>צור תמונה</button>
     <div class="status" id="status"></div>
@@ -227,6 +263,7 @@
   var sb = (window.supabase && window.supabase.createClient) ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
   var refUrl = null, uploading = false, busy = false;
+  var shot = "", sizeVal = "";
   var el = function(id){ return document.getElementById(id); };
   var drop = el("drop"), file = el("file"), preview = el("preview"), dropHint = el("dropHint");
   var gen = el("gen"), statusEl = el("status");
@@ -340,6 +377,35 @@
     });
   }
 
+  // ---------- shot type + size selectors ----------
+  function pickSeg(segId, cb){
+    var btns = el(segId).querySelectorAll("button");
+    btns.forEach(function(b){
+      b.addEventListener("click", function(){
+        btns.forEach(function(x){ x.classList.remove("on"); });
+        b.classList.add("on");
+        cb(b.getAttribute("data-shot") !== null ? b.getAttribute("data-shot") : b.getAttribute("data-size"));
+      });
+    });
+  }
+  pickSeg("shotSeg", function(v){ shot = v; });
+  function customSize(){
+    var w = parseInt(el("sizeW").value, 10), h = parseInt(el("sizeH").value, 10);
+    if(w >= 256 && w <= 4096 && h >= 256 && h <= 4096) return w + "*" + h;
+    return "";
+  }
+  el("sizeSeg").querySelectorAll("button").forEach(function(b){
+    b.addEventListener("click", function(){
+      el("sizeSeg").querySelectorAll("button").forEach(function(x){ x.classList.remove("on"); });
+      b.classList.add("on");
+      var v = b.getAttribute("data-size");
+      if(v === "custom"){ el("sizeCustom").classList.add("show"); sizeVal = customSize(); }
+      else { el("sizeCustom").classList.remove("show"); sizeVal = v; }
+    });
+  });
+  el("sizeW").addEventListener("input", function(){ sizeVal = customSize(); });
+  el("sizeH").addEventListener("input", function(){ sizeVal = customSize(); });
+
   // ---------- generate ----------
   gen.addEventListener("click", function(){
     if(busy) return;
@@ -356,7 +422,7 @@
 
     fetch("/api/studio-image", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ scene: message, referenceUrl: refUrl, extraRefs: extraRefs })
+      body: JSON.stringify({ scene: message, referenceUrl: refUrl, extraRefs: extraRefs, shot: shot, size: sizeVal })
     })
     .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
     .then(function(res){

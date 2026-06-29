@@ -18,8 +18,16 @@ const WAVESPEED_RESULT = "https://api.wavespeed.ai/api/v3/predictions/"; // + {i
 
 // Wrap the scene into a high-quality, identity-preserving edit prompt.
 // extraRefs: [{ url, label }] — additional reference images (objects/outfits) to incorporate.
-function buildPrompt(scene, extraRefs) {
+function shotPhrase(shot) {
+  if (shot === "mirror") return "Framed as a mirror selfie, front facing, phone visible in hand. ";
+  if (shot === "selfie") return "Framed as a close, natural front-facing selfie at arm's length. ";
+  if (shot === "full")   return "Framed as a full-body shot showing her head to feet. ";
+  return "";
+}
+
+function buildPrompt(scene, extraRefs, shot) {
   const s = (scene || "").trim();
+  const shotNote = shotPhrase(shot);
   let refNote = "";
   if (Array.isArray(extraRefs) && extraRefs.length) {
     const shows = extraRefs.map(function (e, i) {
@@ -33,10 +41,11 @@ function buildPrompt(scene, extraRefs) {
   }
   return (
     "Keep the exact same woman from the first reference image — identical face, hair, skin tone and body. Do not change her identity. " +
+    shotNote +
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     refNote +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture."
+    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
   );
 }
 
@@ -60,7 +69,7 @@ async function analyzeToScene(message) {
         model: model,
         reasoning_effort: "none",
         messages: [
-          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
+          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame, tasteful and non-explicit. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
           { role: "user", content: msg }
         ]
       })
@@ -118,6 +127,18 @@ async function verifyAnatomy(imageUrl) {
   }
 }
 
+// Validate a "W*H" size string: integers, 256..4096 each, aspect ratio within 1:16..16:1.
+function sanitizeSize(raw) {
+  if (typeof raw !== "string") return "";
+  const m = raw.replace(/\s+/g, "").match(/^(\d{2,4})[*x](\d{2,4})$/i);
+  if (!m) return "";
+  let w = parseInt(m[1], 10), h = parseInt(m[2], 10);
+  if (!(w >= 256 && w <= 4096 && h >= 256 && h <= 4096)) return "";
+  const ratio = w / h;
+  if (ratio < (1 / 16) || ratio > 16) return "";
+  return w + "*" + h;
+}
+
 export default async function handler(req, res) {
   const key = process.env.WAVESPEED_API_KEY;
   if (!key) {
@@ -170,7 +191,8 @@ export default async function handler(req, res) {
           .map(function (e) { return { url: e.url, label: (typeof e.label === "string" ? e.label : "") }; });
       }
 
-      const finalPrompt = buildPrompt(scene, extraRefs);
+      const shot = (typeof body.shot === "string") ? body.shot : "";
+      const finalPrompt = buildPrompt(scene, extraRefs, shot);
       const images = [refUrl].concat(extraRefs.map(function (e) { return e.url; }));
 
       const payload = {
@@ -179,6 +201,9 @@ export default async function handler(req, res) {
         enable_base64_output: false,
         enable_sync_mode: false,
       };
+      // Optional output size "W*H" (Seedream accepts e.g. "1024*1024"; aspect 1:16..16:1, up to 4096).
+      const size = sanitizeSize(body.size);
+      if (size) payload.size = size;
 
       const r = await fetch(WAVESPEED_SUBMIT, {
         method: "POST",
