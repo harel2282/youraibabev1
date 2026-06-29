@@ -36,7 +36,7 @@ function buildPrompt(scene, extraRefs) {
     (s ? s + " " : "A natural, flattering candid photo of her. ") +
     refNote +
     "Anatomically correct: natural hands with exactly five fingers on each hand, normal proportional limbs, only one person in frame, no duplicated faces or bodies, no warped or distorted features, no extra limbs or fingers. " +
-    "Sharp focus, clean realistic detail, natural realistic skin texture."
+    "Sharp focus, clean realistic detail, natural realistic skin texture. Tasteful, non-explicit."
   );
 }
 
@@ -48,9 +48,9 @@ async function analyzeToScene(message) {
   if (!msg) return { ok: false, scene: msg, error: "empty message" };
   const xaiKey = process.env.XAI_API_KEY;
   if (!xaiKey) return { ok: false, scene: msg, error: "missing XAI_API_KEY on the server" };
-  const model = process.env.GROK_MODEL || "grok-4.3";
+  const model = process.env.STUDIO_MODEL || process.env.GROK_MODEL || "grok-4.3";
   const controller = new AbortController();
-  const timer = setTimeout(function () { controller.abort(); }, 7500);
+  const timer = setTimeout(function () { controller.abort(); }, 8500);
   try {
     const r = await fetch("https://api.x.ai/v1/chat/completions", {
       method: "POST",
@@ -58,8 +58,9 @@ async function analyzeToScene(message) {
       signal: controller.signal,
       body: JSON.stringify({
         model: model,
+        reasoning_effort: "none",
         messages: [
-          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
+          { role: "system", content: "You are an expert prompt engineer for a photorealistic AI image generator that edits a reference photo of one specific woman. Read the user's request — it may be casual, short, vague, or in any language (e.g. Hebrew) — and understand the INTENT, then rewrite it as a single rich, concrete, photographic scene description in ENGLISH. Infer and add the specific realistic detail the request implies: exact setting and background, clothing and styling, pose and body language, facial expression, time of day, lighting, camera framing and overall mood. Keep her as the only person in frame, tasteful and non-explicit. Never copy the user's words verbatim — translate the idea into a vivid visual scene. Do not mention the reference image or the words photo/selfie/picture/send. Output ONLY the final scene description as one vivid paragraph: no preamble, no quotes, no lists, no explanations." },
           { role: "user", content: msg }
         ]
       })
@@ -86,7 +87,7 @@ async function verifyAnatomy(imageUrl) {
   if (String(process.env.IMAGE_QC || "on").toLowerCase() === "off") return true;
   const xaiKey = process.env.XAI_API_KEY;
   if (!xaiKey || !imageUrl) return true;
-  const model = process.env.GROK_VISION_MODEL || process.env.GROK_MODEL || "grok-4.3";
+  const model = process.env.GROK_VISION_MODEL || process.env.STUDIO_MODEL || process.env.GROK_MODEL || "grok-4.3";
   const controller = new AbortController();
   const timer = setTimeout(function () { controller.abort(); }, 8000);
   try {
@@ -96,6 +97,7 @@ async function verifyAnatomy(imageUrl) {
       signal: controller.signal,
       body: JSON.stringify({
         model: model,
+        reasoning_effort: "none",
         messages: [{
           role: "user",
           content: [
